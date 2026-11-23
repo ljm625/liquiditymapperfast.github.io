@@ -1,0 +1,16 @@
+{
+  "format": "liquiditymapperfast-scripts",
+  "version": 1,
+  "scripts": [
+    {
+      "id": "aggregated-cvd-price-divergence",
+      "name": "聚合 CVD · 价量背离",
+      "source": "// 聚合 CVD。按图表周期累计主动买入减主动卖出（美元），市场范围跟随页面的 ALL VENUES。\n// 早期缺少录制时，页面用可用的 Binance K 线回补。未知流量留空，下一根有数据时继续累计。\n// 红绿箭头标出价格对净主动成交反应偏弱的区间。只用已经收盘、数据来源一致的连续 K 线。\n\nlineColor = option(type=color, default=#54b6c8, label=\"CVD 线色\")\nshowMarks = option(type=checkbox, default=true, label=\"显示价量背离标记\")\nshowBounds = option(type=checkbox, default=true, label=\"显示标记区间上下沿\")\nlookback = option(type=number, default=20, min=3, max=200, step=1, label=\"回看 K 线根数\")\nminDelta = option(type=number, default=2, min=0.1, max=50, step=0.1, label=\"最小净主动成交占比 (%)\")\nmaxResponse = option(type=number, default=15, min=0, max=60, step=1, label=\"最大同向价格位移 (% 区间振幅)\")\n\nfeed = bar.recorded\nvar hasFlow = (feed == 1 || feed == 0) && isFinite(vbuy + vsell)\nvar delta = hasFlow ? vbuy - vsell : NaN\nvar cvd = cum(delta)\nline(cvd, title=\"聚合 CVD\", color=lineColor, lineWidth=2, priceScaleId=cvdUsd)\nif (renderer.last) mark(cvd, title=\"最新 CVD\", color=lineColor, shape=tag, priceScaleId=cvdUsd)\n\nif (showMarks) {\n  var n = Math.max(3, Math.min(200, Math.round(lookback)))\n  starts = time\n  opens = $price.open\n  var hi = $price.high, lo = $price.low, close = $price.close\n  var usable = hasFlow && isFinite(opens) && isFinite(hi) && isFinite(lo) && isFinite(close) && lo > 0 && hi >= lo\n  var adjacent = starts - starts[1] == renderer.timeframe\n  coveredBars = usable ? (adjacent && feed == feed[1] ? coveredBars + 1 : 1) : 0\n\n  var net = sum(usable ? delta : 0, n)\n  var gross = sum(usable ? vbuy + vsell : 0, n)\n  var span = highest(usable ? hi : 0, n) - lowest(usable ? lo : 0, n)\n  var startOpen = opens[n - 1]\n  var move = close - startOpen\n  var share = gross > 0 ? 100 * net / gross : 0\n  var response = span > 0 ? 100 * Math.sign(net) * move / span : 0\n  var upper = highest(cvd, n), lower = lowest(cvd, n)\n\n  // A marked window must close and can share no candles with the previous marked window.\n  var clear = lastMarkedBar == 0 || renderer.length - lastMarkedBar >= n\n  if (!renderer.forming && coveredBars >= n && clear && Math.abs(share) >= minDelta && response <= maxResponse) {\n    lastMarkedBar = renderer.length\n    var buysLead = net > 0\n    var color = buysLead ? \"#69b975\" : \"#e6584e\"\n    var tip = (buysLead ? \"净主动买入，价格跟涨偏弱\" : \"净主动卖出，价格跟跌偏弱\")\n      + \" · \" + n + \" 根 K 线\"\n      + \"\\n净主动成交 / 总主动成交：\" + share.toFixed(2) + \"%\"\n      + \"\\n窗口价格变化：\" + (100 * move / startOpen).toFixed(2) + \"%\"\n      + \"\\n数据：\" + (feed == 1 ? \"页面录制\" : \"Binance K 线回补\")\n    if (buysLead) mark(cvd, \"\", tip, color, title=\"买盘占优，价格跟涨偏弱\", shape=arrowUp, position=below, priceScaleId=cvdUsd)\n    else mark(cvd, \"\", tip, color, title=\"卖盘占优，价格跟跌偏弱\", shape=arrowDown, position=above, priceScaleId=cvdUsd)\n    if (showBounds) {\n      var from = starts[n - 1]\n      level(upper, from, time, \"\", color, title=\"区间上沿\", lineStyle=2, priceScaleId=cvdUsd)\n      level(lower, from, time, \"\", color, title=\"区间下沿\", lineStyle=2, priceScaleId=cvdUsd)\n    }\n  }\n}\n",
+      "options": {},
+      "on": true,
+      "api": 3,
+      "height": 185,
+      "place": "pane"
+    }
+  ]
+}

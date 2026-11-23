@@ -70,6 +70,11 @@ const about = (): Readonly<Record<ExampleKey, { tip: string; body: readonly stri
       t('A low is strong once the rise away from it breaks the swing high it fell from (buyers took over there), and weak until then; a high, likewise, once the fall from it breaks the low it rose from. A level runs on to the right edge with its name and price until the price trades at it again; a tested one ends there, hidden unless Tested levels shows it, with a cross.'),
       t('The swing size, whether a break counts by the close or the wick, the colours and the names are settings. It maps where the structure stands, not where price goes: whether a weak level draws price back or a strong one holds has not been tested here.')],
   },
+  'rsi-divergence': {
+    tip: t('Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.'),
+    body: [t('A higher swing high with a lower RSI marks bearish divergence. A lower swing low with a higher RSI marks bullish divergence. The lines appear after the candles to the right of the newer swing have closed.'),
+      t('The default RSI period is 14 candles, with 3 candles on each side of a swing. Both are adjustable. The map markings can be hidden in the script settings.')],
+  },
   'delta-histogram': {
     tip: t('Each candle\'s delta, what was bought at market less what was sold, as a bar: up in green where buyers led, down in red where sellers did.'),
     body: [t('Unlike the cumulative delta, each bar stands on its own, so it shows the moments rather than the running total: a tall bar is a candle where one side\'s market orders, the ones that trade at once, clearly outweighed the other\'s.'),

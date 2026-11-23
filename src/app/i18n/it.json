@@ -3588,5 +3588,9 @@
  "in the middle": "nella media",
  "above {pct} %": "sopra {pct} %",
  "below {pct} %": "sotto {pct} %",
- "bids {bids} · asks {asks}": "bids {bids} · asks {asks}"
+ "bids {bids} · asks {asks}": "bids {bids} · asks {asks}",
+ "RSI with divergences": "RSI con divergenze",
+ "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "RSI di Wilder con divergenze rialziste e ribassiste nella riga dell’RSI e nel grafico dei prezzi.",
+ "A higher swing high with a lower RSI marks bearish divergence. A lower swing low with a higher RSI marks bullish divergence. The lines appear after the candles to the right of the newer swing have closed.": "Un massimo crescente con RSI decrescente indica una divergenza ribassista. Un minimo decrescente con RSI crescente indica una divergenza rialzista. Le linee compaiono alla chiusura delle candele a destra dell’estremo più recente.",
+ "The default RSI period is 14 candles, with 3 candles on each side of a swing. Both are adjustable. The map markings can be hidden in the script settings.": "Per impostazione predefinita l’RSI usa 14 candele e ogni estremo richiede 3 candele su ciascun lato. Entrambi i valori sono regolabili. I segni sul grafico si possono nascondere nelle impostazioni dello script."
 }

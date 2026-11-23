@@ -17,6 +17,9 @@ export const DEFAULT_MARGINS: Margins = { top: 0.12, bottom: 0.08 };
 /** A style value as a number, or `fallback`. */
 export const styleNum = (v: OptionValue | undefined, fallback: number): number => typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 
+/** A segment can join points on the map even when its script has a row in the pane. */
+export const segmentOnMap = (plot: PlotOut): boolean => plot.kind === 'segment' && plot.style.onMap === true;
+
 /** The scale id of a plot: its own `priceScaleId`, else its script's, else the one shared by the script's plots. */
 export function scaleIdOf(plot: Pick<PlotOut, 'style'>, scriptOptions: Readonly<Record<string, OptionValue>>): string {
   const own = plot.style.priceScaleId ?? scriptOptions.priceScaleId;
@@ -46,6 +49,14 @@ export function visibleRange(time: Float64Array, t0: number, t1: number, tf: num
 /** The values of a plot that set its scale: a histogram and a baseline include their base, so the bars stand on it. */
 export function plotExtent(plot: PlotOut, from: number, to: number): [number, number] | null {
   let lo = Infinity, hi = -Infinity;
+  if (plot.kind === 'segment') {
+    for (const s of plot.segments ?? []) {
+      if (s.from > to || s.to < from) continue;
+      lo = Math.min(lo, s.value, s.endValue);
+      hi = Math.max(hi, s.value, s.endValue);
+    }
+    return lo === Infinity ? null : [lo, hi];
+  }
   // Levels count where they cross the candles in view, wherever they start.
   if (plot.kind === 'level') {
     const v = plot.fields.value!, n = v.length;
@@ -271,7 +282,7 @@ export function plotColorAt(plot: PlotOut, i: number, fallback: string, up: stri
   const v = plot.fields.value?.[i] ?? NaN;
   switch (plot.kind) {
     case 'line': case 'area': return pointColor(plot, i, color(plot.style.color ?? plot.style.lineColor, fallback));
-    case 'mark': return pointColor(plot, i, color(plot.style.color, fallback));
+    case 'mark': case 'segment': return pointColor(plot, i, color(plot.style.color, fallback));
     case 'level': { const v = plot.fields.value!; for (let s = Math.min(i, v.length - 1); s >= 0; s--) if (Number.isFinite(v[s]!) && levelEnd(plot, s, v.length) >= i) return pointColor(plot, s, color(plot.style.color, fallback)); return color(plot.style.color, fallback); }
     case 'baseline': return pointColor(plot, i, v >= styleNum(plot.style.baseValue ?? plot.style.base, 0) ? color(plot.style.topLineColor, up) : color(plot.style.bottomLineColor, down));
     case 'histogram': return pointColor(plot, i, color(plot.style.color, fallback));
@@ -301,6 +312,7 @@ export function paintPlot(f: Frame, plot: PlotOut, s: Scale): void {
     }
     case 'mark': paintMarks(f, plot, y); break;
     case 'level': paintLevels(f, plot, y); break;
+    case 'segment': paintSegments(f, plot, y, width, cx); break;
     case 'histogram': {
       const v = plot.fields.value!, base = styleNum(plot.style.base, 0), y0 = y(base), fallback = color(plot.style.color, f.color);
       const w = Math.max(1, f.barW * 0.72);
@@ -398,6 +410,39 @@ function strokeLine(f: Frame, v: Float64Array, y: (v: number) => number, colorAt
 
 /** The dashes of a line style (0 solid, 1 dotted, 2 dashed, 3 long dashes, 4 sparse dots). */
 const dashes = (lineStyle: number): number[] => lineStyle === 1 ? [1, 2] : lineStyle === 2 ? [4, 3] : lineStyle === 3 ? [8, 4] : lineStyle === 4 ? [1, 5] : [];
+
+/** Segments are kept at confirmation but drawn between their endpoints, even if the confirmation candle is offscreen. */
+function paintSegments(f: Frame, plot: PlotOut, y: (v: number) => number, width: number, cx: (i: number) => number): void {
+  const { ctx } = f, pos = plot.style.position, lift = pos === 'above' ? -5 : pos === 'below' ? 5 : 0;
+  const text = typeof plot.style.label === 'string' ? plot.style.label : '';
+  const dots = plot.style.dots === true, radius = width + 1;
+  const ink = color(plot.style.color, f.color);
+  ctx.strokeStyle = ink;
+  ctx.fillStyle = ink;
+  ctx.lineWidth = width;
+  ctx.setLineDash(dashes(styleNum(plot.style.lineStyle, 0)));
+  ctx.font = markFont(1);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = lift > 0 ? 'top' : 'bottom';
+  const half = text ? ctx.measureText(text).width / 2 : 0;
+  const labels: { x: number; y: number }[] = [];
+  for (const s of plot.segments ?? []) {
+    if (s.from > f.to || s.to < f.from) continue;
+    const x0 = cx(s.from), x1 = cx(s.to);
+    if (x1 < 0 || x0 > f.w || x1 - x0 < 1) continue;
+    const y0 = y(s.value) + lift, y1 = y(s.endValue) + lift;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    if (dots && x1 - x0 >= 2 * radius) {
+      ctx.beginPath(); ctx.arc(x0, y0, radius, 0, 2 * Math.PI);
+      ctx.moveTo(x1 + radius, y1); ctx.arc(x1, y1, radius, 0, 2 * Math.PI); ctx.fill();
+    }
+    const labelY = y1 + (lift > 0 ? 5 : -5);
+    if (text && x1 - half >= 0 && x1 + half <= f.w && !labels.some(p => Math.abs(p.x - x1) < 2 * half + 4 && Math.abs(p.y - labelY) < 12)) {
+      ctx.fillText(text, x1, labelY);
+      labels.push({ x: x1, y: labelY });
+    }
+  }
+}
 
 /** The shapes a level that ended can have at its end: none (the default), a cross or a dot. */
 export const levelEndShape = (v: OptionValue | undefined): 'none' | 'cross' | 'dot' => v === 'cross' || v === 'dot' ? v : 'none';
@@ -623,7 +668,7 @@ export function onPlot(plot: PlotOut, s: Scale, f: Pick<Frame, 'x' | 'barW' | 't
       const a = plot.fields.lowerValue![i]!, b = plot.fields.higherValue![i]!;
       return Number.isFinite(a) && Number.isFinite(b) && inside(y(a), y(b));
     }
-    case 'mark': return false;
+    case 'mark': case 'segment': return false;
     case 'level': return levelsAt(plot, i).some(v => near(y(v)));
   }
 }

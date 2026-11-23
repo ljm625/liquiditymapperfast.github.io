@@ -3521,5 +3521,9 @@
  "in the middle": "ortalarda",
  "above {pct} %": "%{pct} üzerinde",
  "below {pct} %": "%{pct} altında",
- "bids {bids} · asks {asks}": "bids {bids} · asks {asks}"
+ "bids {bids} · asks {asks}": "bids {bids} · asks {asks}",
+ "RSI with divergences": "Uyumsuzluklu RSI",
+ "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "RSI satırında ve fiyat grafiğinde yükseliş ve düşüş uyumsuzluklarını gösteren Wilder RSI.",
+ "A higher swing high with a lower RSI marks bearish divergence. A lower swing low with a higher RSI marks bullish divergence. The lines appear after the candles to the right of the newer swing have closed.": "Fiyat daha yüksek tepe, RSI daha düşük değer yaptığında düşüş uyumsuzluğu oluşur. Fiyat daha düşük dip, RSI daha yüksek değer yaptığında yükseliş uyumsuzluğu oluşur. Çizgiler, daha yeni tepe veya dibin sağındaki mumlar kapandıktan sonra görünür.",
+ "The default RSI period is 14 candles, with 3 candles on each side of a swing. Both are adjustable. The map markings can be hidden in the script settings.": "Varsayılan RSI dönemi 14 mumdur ve tepe ya da dibin iki yanında 3 mum aranır. Her iki değer de ayarlanabilir. Grafikteki işaretler betik ayarlarından gizlenebilir."
 }

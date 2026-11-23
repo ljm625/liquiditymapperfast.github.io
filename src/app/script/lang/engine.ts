@@ -6,7 +6,7 @@ import { DEPTH_FUNCTIONS, FULL_RUN_MS, MAX_PLOTS, PLOTS, RUN_MS, STEPS_PER_CANDL
 import { DateValue, HostObject, NativeFunction, ScriptRuntimeError, isPlain, num, own, plain, text, toData, truthy, type Value } from './values.ts';
 import { BUILTINS, MAX_WINDOW, makeInstance, type Candle, type Instance } from './builtins.ts';
 import { COLOR_NAMES, interpolateColors, rgb, safeColor } from './colors.ts';
-import { ALERT_SOUNDS, ALERT_TEXT, MARK_TEXT, MARK_TIP, MAX_ALERTS, PLOT_FIELDS, type AlertOut, type AlertSound, type PlotKind, type PlotOut, type ScriptResult } from '../protocol.ts';
+import { ALERT_SOUNDS, ALERT_TEXT, MARK_TEXT, MARK_TIP, MAX_ALERTS, PLOT_FIELDS, type AlertOut, type AlertSound, type PlotKind, type PlotOut, type ScriptResult, type SegmentOut } from '../protocol.ts';
 import { DEFAULT_SCRIPT_THEME, filterKey, type BarInputs, type SourceFilter, type SourceInputs } from '../inputs.ts';
 import type { OptionValue } from '../records.ts';
 
@@ -64,7 +64,7 @@ function styleData(v: OptionValue | undefined): OptionValue | undefined {
 }
 
 /** What a run of a script keeps per plot while it goes from candle to candle. */
-interface PlotBuild { kind: PlotKind; title: string; style: Record<string, OptionValue>; fields: Record<string, Float64Array>; colors: string[] | null; texts: string[] | null; tips: string[] | null; ends: Float64Array | null }
+interface PlotBuild { kind: PlotKind; title: string; style: Record<string, OptionValue>; fields: Record<string, Float64Array>; colors: string[] | null; texts: string[] | null; tips: string[] | null; ends: Float64Array | null; segments?: SegmentOut[] }
 
 /**
  * Run a script over every candle of `inputs`. `optionValues` are the values set for its options (a declared option not set reads its default).
@@ -400,6 +400,20 @@ export function createRunner(id: string, source: string, optionValues: Record<st
       return;
     }
     if (kind === 'level') { levelAt(p, args, point); return; }
+    if (kind === 'segment') {
+      const o = isPlain(point) ? point : null;
+      const value = o ? o.value : point, endValue = o ? o.endValue : args[2];
+      if (typeof value !== 'number' || !Number.isFinite(value) || typeof endValue !== 'number' || !Number.isFinite(endValue)) return;
+      const from = candleOf(o ? o.from : args[1]), to = candleOf(o ? o.to : args[3]);
+      charge(budget, 1 + 2 * Math.ceil(Math.log2(i + 2)));
+      if (!(from >= 0 && to > from)) return;
+      // Each call site keeps at most one segment per candle. The endpoints may be older than the confirmation.
+      const segments = p.segments ??= [];
+      const result = { from, to, value, endValue, confirmed: i };
+      if (segments[segments.length - 1]?.confirmed === i) segments[segments.length - 1] = result;
+      else segments.push(result);
+      return;
+    }
     if (isPlain(point)) {
       for (const f of PLOT_FIELDS[kind]) { const v = point[f]; p.fields[f]![i] = typeof v === 'number' ? v : v === undefined || v === null ? NaN : num(v); }
       if (kind === 'line' || kind === 'area' || kind === 'histogram' || kind === 'baseline') { if (point.value === undefined && typeof point.close === 'number') p.fields.value![i] = point.close; }
@@ -498,7 +512,7 @@ export function createRunner(id: string, source: string, optionValues: Record<st
   const interp = new Interpreter(a.program, host, budget);
 
   /** What the script held after candle `at` of `inputs` had closed, and what it had drawn by then. */
-  interface Snapshot { at: number; inputs: BarInputs; kept: Map<string, { v: Value; past: Value[] }>; states: Map<number, unknown>; fields: Map<number, Record<string, Float64Array>>; colors: Map<number, string[] | null>; texts: Map<number, [string[] | null, string[] | null]>; ends: Map<number, Float64Array | null>; candleColors: string[]; styles: Map<number, { title: string; style: Record<string, OptionValue> }>; styled: Set<number>; widest: { asked: number; n: number; line: number } }
+  interface Snapshot { at: number; inputs: BarInputs; kept: Map<string, { v: Value; past: Value[] }>; states: Map<number, unknown>; fields: Map<number, Record<string, Float64Array>>; colors: Map<number, string[] | null>; texts: Map<number, [string[] | null, string[] | null]>; ends: Map<number, Float64Array | null>; segments: Map<number, readonly SegmentOut[]>; candleColors: string[]; styles: Map<number, { title: string; style: Record<string, OptionValue> }>; styled: Set<number>; widest: { asked: number; n: number; line: number } }
   let snap: Snapshot | null = null;
   /**
    * Whether what the script holds can be put back exactly: kept names holding plain values (numbers, texts, true/false, dates), or arrays and
@@ -545,6 +559,7 @@ export function createRunner(id: string, source: string, optionValues: Record<st
     colors: new Map([...plots].map(([site, p]) => [site, p.kind === 'level' && p.colors ? p.colors.slice() : p.colors])),
     texts: new Map([...plots].map(([site, p]) => [site, [p.kind === 'level' && p.texts ? p.texts.slice() : p.texts, p.tips]])),
     ends: new Map([...plots].map(([site, p]) => [site, p.ends ? p.ends.slice() : null])),
+    segments: new Map([...plots].flatMap(([site, p]) => p.segments ? [[site, p.segments.slice()] as const] : [])),
     candleColors,
     styles: new Map([...plots].map(([site, p]) => [site, { title: p.title, style: JSON.parse(JSON.stringify(p.style)) as Record<string, OptionValue> }])),
     styled: new Set(styled),
@@ -610,6 +625,7 @@ export function createRunner(id: string, source: string, optionValues: Record<st
         // A level's ends, as its prices are.
         const oldEnds = from?.ends.get(site) ?? null;
         if (oldEnds) { p.ends = new Float64Array(n).fill(NaN); p.ends.set(oldEnds.subarray(0, start)); } else p.ends = null;
+        p.segments = from?.segments.get(site)?.slice();
       }
       alerts = []; alertsFrom = Math.max(0, inputs.forming ? n - 2 : n - 1);
       candleColors = from ? from.candleColors.slice(0, start) : [];
@@ -638,7 +654,13 @@ export function createRunner(id: string, source: string, optionValues: Record<st
       // "line|asked|window|candles": a window that never fills here, or one asked longer than any window can be (the window is then MAX_WINDOW).
       if (n > 0 && (widest.n > n || widest.asked > widest.n)) warnings.push({ code: 'long-window', detail: `${widest.line}|${widest.asked}|${widest.n}|${n}` });
       dropZeros();
-      const out: PlotOut[] = plotOrder.map(site => { const p = plots.get(site)!; return { kind: p.kind, title: p.title, style: p.style, fields: p.fields, colors: p.colors, ...(p.kind === 'mark' ? { texts: p.texts, tips: p.tips } : {}), ...(p.kind === 'level' ? { texts: p.texts, ends: p.ends } : {}) }; });
+      const out: PlotOut[] = plotOrder.map(site => {
+        const p = plots.get(site)!;
+        return { kind: p.kind, title: p.title, style: p.style, fields: p.fields, colors: p.colors,
+          ...(p.kind === 'mark' ? { texts: p.texts, tips: p.tips } : {}),
+          ...(p.kind === 'level' ? { texts: p.texts, ends: p.ends } : {}),
+          ...(p.kind === 'segment' ? { segments: p.segments ?? [] } : {}) };
+      });
       if (!out.length && !colored && !alertSites) warnings.push({ code: 'no-plots' });
       return { id, ok: true, plots: out, warnings, steps: budget.steps, ms: now() - started, ...(colored ? { candleColors: Array.from({ length: n }, (_, k) => candleColors[k] ?? '') } : {}), ...(alerts.length ? { alerts } : {}) };
     },

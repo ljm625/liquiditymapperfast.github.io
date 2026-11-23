@@ -31,7 +31,8 @@ const levels = (p: PlotOut): [number, number, number | null, string, string][] =
 };
 
 test('levels came with language version 3', () => {
-  assert.deepEqual([SCRIPT_API, API_VERSION], [3, 3]);
+  assert.equal(SCRIPT_API, API_VERSION);
+  assert.ok(SCRIPT_API >= 3);
 });
 
 test('a level is kept at the candle its from names and drawn to the one its to names, or on to the right edge', () => {

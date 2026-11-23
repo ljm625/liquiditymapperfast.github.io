@@ -20,17 +20,20 @@ export type RunResponse = { t: 'result'; seq: number; results: ScriptResult[]; d
 /**
  * What a plot draws: a line, an area under a line, bars, a line with a baseline, candles or bars of four prices, a band between two lines,
  * marks (a label or a shape at a value, with a text to read when the pointer is on it), or levels (a price held from one candle on, to a
- * later one or to the right edge, named at its right end).
+ * later one or to the right edge, named at its right end), or segments joining any two points.
  */
-export type PlotKind = 'line' | 'area' | 'histogram' | 'baseline' | 'candlestick' | 'bar' | 'cloudarea' | 'brokenarea' | 'mark' | 'level';
+export type PlotKind = 'line' | 'area' | 'histogram' | 'baseline' | 'candlestick' | 'bar' | 'cloudarea' | 'brokenarea' | 'mark' | 'level' | 'segment';
 
 /** The numbers each kind of plot holds per candle. */
 export const PLOT_FIELDS: Readonly<Record<PlotKind, readonly string[]>> = {
   line: ['value'], area: ['value'], histogram: ['value'], baseline: ['value'],
   candlestick: ['open', 'high', 'low', 'close'], bar: ['open', 'high', 'low', 'close'],
   cloudarea: ['lowerValue', 'higherValue'], brokenarea: ['lowerValue', 'higherValue'],
-  mark: ['value'], level: ['value'],
+  mark: ['value'], level: ['value'], segment: [],
 };
+
+/** A segment's endpoints (candle indices and values) and the candle that first had enough data to draw it. */
+export interface SegmentOut { from: number; to: number; value: number; endValue: number; confirmed: number }
 
 /** The longest text a mark shows on the chart, and the longest it says when the pointer is on it. */
 export const MARK_TEXT = 24, MARK_TIP = 600;
@@ -53,6 +56,8 @@ export interface PlotOut {
    * and `ends[s]` is the candle it ends at, NaN for one that runs on to the right edge.
    */
   ends?: Float64Array | null;
+  /** A segment plot holds just its drawn segments, oldest confirmation first. */
+  segments?: readonly SegmentOut[];
 }
 
 /** The candle a level starting at `s` ends at: its own end, or the newest of `n` candles for one that runs on. */
@@ -95,6 +100,14 @@ export type ScriptResult =
 /** A plot's newest values: its fields at the last of its first `upTo` candles where any of them is a number ([NaN] for a plot that drew none). */
 export function newestOf(p: PlotOut, upTo = Infinity): number[] {
   if (p.kind === 'level') { const at = Math.min(p.fields.value?.length ?? 0, upTo) - 1, standing = levelsAt(p, at, 8); return standing.length ? standing : [NaN]; }
+  if (p.kind === 'segment') {
+    const segments = p.segments ?? [];
+    for (let j = segments.length - 1; j >= 0; j--) {
+      const s = segments[j]!;
+      if (s.confirmed < upTo) return [s.value, s.endValue];
+    }
+    return [NaN];
+  }
   const fields = PLOT_FIELDS[p.kind];
   let i = Math.min(p.fields[fields[0]!]?.length ?? 0, upTo) - 1;
   while (i >= 0 && !fields.some(f => Number.isFinite(p.fields[f]?.[i] ?? NaN))) i--;

@@ -25,7 +25,7 @@ import { exampleHeight, examples } from '../script/examples.ts';
 import { valuesAt, type PlotOut, type ScriptResult, type Warning } from '../script/protocol.ts';
 import { MARK_SLOP, MARK_SLOP_TOUCH, markAt, markLines, markNearest, markText, type DrawnMark } from '../script/marks.ts';
 import { AlertNews, fingerprint, type ScriptAlert } from '../script/alert-news.ts';
-import { drawTags, layoutTags, onPlot, paintPlot, plotColorAt, scaleIdOf, scalesOf, shortNumber, visibleRange, yOf, type Frame, type Scale, type TagAsk } from '../script/paint.ts';
+import { drawTags, layoutTags, onPlot, paintPlot, plotColorAt, scaleIdOf, scalesOf, segmentOnMap, shortNumber, visibleRange, yOf, type Frame, type Scale, type TagAsk } from '../script/paint.ts';
 import { errorText } from '../script/messages.ts';
 import { safeColor } from '../script/lang/colors.ts';
 import type { BarInputs, SourceFilter } from '../script/inputs.ts';
@@ -420,7 +420,7 @@ export class ScriptPane extends TimePane {
     // A script whose text, options or version changed has no answer until it runs again: the old one is not drawn meanwhile.
     const was = new Map(this.#records.map(r => [r.id, r]));
     const stale = list.filter(r => { const o = was.get(r.id); return !o || o.source !== r.source || o.api !== r.api || JSON.stringify(o.options) !== JSON.stringify(r.options) || !r.on; });
-    if (stale.some(r => this.#held.has(r.id))) { this.#held = new Map(this.#held); for (const r of stale) this.#held.delete(r.id); this.#heldGen++; this.onMapChanged(); }
+    if (stale.some(r => this.#held.has(r.id))) { this.#held = new Map(this.#held); for (const r of stale) this.#held.delete(r.id); this.#heldGen++; }
     this.#records = list;
     this.#version++;
     // A run still waiting for its worker to load holds the old scripts: dropped now, not at the next frame (the worker may load before it).
@@ -429,6 +429,7 @@ export class ScriptPane extends TimePane {
     const kept = storeScripts(list);
     this.#lastRun = 0;
     this.refresh();
+    this.onMapChanged();
     // A Range summary of the pane looks again (its key holds the scripts' version) after the pane's next drawing, or while the pane is not laid
     // out and does not draw, as it is.
     this.rangeStale();
@@ -758,10 +759,11 @@ export class ScriptPane extends TimePane {
         // A run for another timeframe is not drawn over this one: the next run replaces it.
         const shown = shownCount(time, tf), [from, last] = visibleRange(time, v.t0, v.t1, tf), to = Math.min(last, shown - 1);
         if (this.#current(held, tf) && to >= from) {
-          const scales = scalesOf(res.plots, r.options, from, to);
+          const scales = scalesOf(res.plots.filter(plot => !segmentOnMap(plot)), r.options, from, to);
           const frame: Frame = { ctx, x: tt => v.xOf(tt, pw), barW: Math.max(1, v.xOf(tf, pw) - v.xOf(0, pw)), tf, time, from, to, top, height: rowH, w: pw, color: p.text, up: p.candleUp, down: p.candleDown };
           const tags: { ask: TagAsk; plot: PlotOut }[] = [];
           res.plots.forEach((plot, j) => {
+            if (segmentOnMap(plot)) return;
             const s = scales.get(scaleIdOf(plot, r.options)), fallback = fallbacks[j % fallbacks.length]!;
             if (s) paintPlot({ ...frame, color: fallback, ...(plot.kind === 'mark' ? { marks: box => { this.#rowMarks.push({ box, id: r.id, name: r.name, plot, color: plotColorAt(plot, box.i, fallback, p.candleUp, p.candleDown) }); }, tags: ask => { tags.push({ ask, plot }); } } : {}) }, plot, s);
           });
@@ -869,17 +871,21 @@ export class ScriptPane extends TimePane {
     // columns past the plot are the map's own.
     const tags: { ask: TagAsk; plot: PlotOut; id: string; name: string }[] = [];
     for (const r of this.#records) {
-      if (!r.on || r.hidden || r.place !== 'map') continue;
+      if (!r.on || r.hidden) continue;
       const held = this.#held.get(r.id);
       if (!held?.result.ok || !this.#current(held, tf) || !held.time.length) continue;
+      const drawsHere = (plot: PlotOut): boolean => r.place === 'map' || segmentOnMap(plot);
+      if (!held.result.plots.some(drawsHere)) continue;
       const res = held.result, time = held.time, [from, last] = visibleRange(time, v.t0, v.t1, tf), to = Math.min(last, shownCount(time, tf) - 1);
       if (to < from) continue;
-      const scales = scalesOf(res.plots.filter(pl => scaleIdOf(pl, r.options) !== 'right'), r.options, from, to);
-      scales.set('right', { min: v.p0, max: v.p1, margins: { top: 0, bottom: 0 } });
+      const scales = scalesOf(res.plots.filter(pl => drawsHere(pl) && !segmentOnMap(pl) && scaleIdOf(pl, r.options) !== 'right'), r.options, from, to);
+      const priceScale = { min: v.p0, max: v.p1, margins: { top: 0, bottom: 0 } };
+      scales.set('right', priceScale);
       this.#mapDrawn.scripts.set(r.id, scales);
       const frame: Frame = { ctx, x: tt => v.xOf(tt, pw), barW: Math.max(1, v.xOf(tf, pw) - v.xOf(0, pw)), tf, time, from, to, top: 0, height: ph, w: pw, color: p.text, up: p.candleUp, down: p.candleDown };
       res.plots.forEach((plot, j) => {
-        const s = scales.get(scaleIdOf(plot, r.options)), fallback = fallbacks[j % fallbacks.length]!;
+        if (!drawsHere(plot)) return;
+        const s = segmentOnMap(plot) ? priceScale : scales.get(scaleIdOf(plot, r.options)), fallback = fallbacks[j % fallbacks.length]!;
         if (s) paintPlot({ ...frame, color: fallback, ...(plot.kind === 'mark' ? { marks: box => { this.#mapMarks.push({ box, id: r.id, name: r.name, plot, color: plotColorAt(plot, box.i, fallback, p.candleUp, p.candleDown) }); }, tags: ask => { tags.push({ ask: !ask.named && scaleIdOf(plot, r.options) === 'right' ? { ...ask, text: fmtPrice(ask.value) } : ask, plot, id: r.id, name: r.name }); } } : {}) }, plot, s);
       });
     }
@@ -1139,20 +1145,28 @@ export class ScriptPane extends TimePane {
     const res = held.result, v = this.view, p = this.palette, tf = held.tf, fallbacks = [p.vwap, p.poc, p.level, p.accent, p.bid, p.ask];
     const [from, last] = visibleRange(held.time, v.t0, v.t1, tf), to = Math.min(last, shownCount(held.time, tf) - 1);
     const band = target.place === 'pane' ? Math.round(Math.max(Math.min(PREVIEW_BAND_MIN, ph), Math.min(target.height, ph * PREVIEW_BAND_SHARE))) : 0, top = band ? ph - band : 0;
+    const frame: Frame = { ctx, x: tt => v.xOf(tt, pw), barW: Math.max(1, v.xOf(tf, pw) - v.xOf(0, pw)), tf, time: held.time, from, to, top, height: band || ph, w: pw, color: p.text, up: p.candleUp, down: p.candleDown };
+    const priceScale = { min: v.p0, max: v.p1, margins: { top: 0, bottom: 0 } };
     ctx.save();
     ctx.globalAlpha = PREVIEW_DIM; ctx.fillStyle = p.bg; ctx.fillRect(0, 0, pw, ph); ctx.globalAlpha = 1;
     if (band) {
+      if (to >= from) res.plots.forEach((plot, j) => {
+        if (segmentOnMap(plot)) paintPlot({ ...frame, top: 0, height: ph, color: fallbacks[j % fallbacks.length]! }, plot, priceScale);
+      });
       ctx.globalAlpha = 0.9; ctx.fillStyle = p.bg; ctx.fillRect(0, top, pw, band); ctx.globalAlpha = 1;
       ctx.strokeStyle = p.line; ctx.beginPath(); ctx.moveTo(0, top + 0.5); ctx.lineTo(pw, top + 0.5); ctx.stroke();
       ctx.beginPath(); ctx.rect(0, top, pw, band); ctx.clip();
     }
     if (to >= from) {
-      const frame: Frame = { ctx, x: tt => v.xOf(tt, pw), barW: Math.max(1, v.xOf(tf, pw) - v.xOf(0, pw)), tf, time: held.time, from, to, top, height: band || ph, w: pw, color: p.text, up: p.candleUp, down: p.candleDown };
       // In a band each scale is fitted to what is in view, as in a row; on the map the price scale is the map's.
-      const scales = scalesOf(band ? res.plots : res.plots.filter(pl => scaleIdOf(pl, target.options) !== 'right'), target.options, from, to);
-      if (!band) scales.set('right', { min: v.p0, max: v.p1, margins: { top: 0, bottom: 0 } });
+      const scales = scalesOf(res.plots.filter(pl => !segmentOnMap(pl) && (band || scaleIdOf(pl, target.options) !== 'right')), target.options, from, to);
+      if (!band) scales.set('right', priceScale);
       const asks: TagAsk[] = [];
-      res.plots.forEach((plot, j) => { const s = scales.get(scaleIdOf(plot, target.options)); if (s) paintPlot({ ...frame, color: fallbacks[j % fallbacks.length]!, tags: ask => { asks.push(!band && !ask.named && scaleIdOf(plot, target.options) === 'right' ? { ...ask, text: fmtPrice(ask.value) } : ask); } }, plot, s); });
+      res.plots.forEach((plot, j) => {
+        if (band && segmentOnMap(plot)) return;
+        const s = segmentOnMap(plot) ? priceScale : scales.get(scaleIdOf(plot, target.options));
+        if (s) paintPlot({ ...frame, color: fallbacks[j % fallbacks.length]!, tags: ask => { asks.push(!band && !ask.named && scaleIdOf(plot, target.options) === 'right' ? { ...ask, text: fmtPrice(ask.value) } : ask); } }, plot, s);
+      });
       // Its tags at the right edge, as where it is drawn for good.
       // In a replay the map is covered past its moment: the tags stand at it.
       const replayX = replaying() ? v.xOf(pageNow(), pw) : Infinity;
