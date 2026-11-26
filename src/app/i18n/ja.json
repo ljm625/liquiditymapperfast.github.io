@@ -3397,6 +3397,6 @@
  "How the levels shown here changed over time, whatever kinds the button at the top of the column shows (liquidations, stops, take profits): opens them in the Depth pane.": "ここに表示されているレベルが時間とともにどう変わったか（列の上部のボタンで選んだ種類のとおり：清算、ストップ、利益確定）。それらをデプスパネルで開きます。",
  "RSI with divergences": "RSI ダイバージェンス",
  "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "Wilder の RSI。RSI の行と価格チャートに強気・弱気のダイバージェンスを表示します。",
- "A higher swing high with a lower RSI marks bearish divergence. A lower swing low with a higher RSI marks bullish divergence. The lines appear after the candles to the right of the newer swing have closed.": "価格の高値が切り上がり、RSI が下がれば弱気のダイバージェンスです。価格の安値が切り下がり、RSI が上がれば強気です。新しい高値または安値の右側にある足が確定すると線を描きます。",
- "The default RSI period is 14 candles, with 3 candles on each side of a swing. Both are adjustable. The map markings can be hidden in the script settings.": "初期設定は RSI が 14 本、スイングの両側が各 3 本です。どちらも調整でき、メインチャートの印はスクリプト設定で非表示にできます。"
+ "The script finds swings in RSI and takes the price high or low from the same candles. It compares swings 5 to 60 candles apart. A higher price high with a lower RSI high marks bearish divergence. A lower price low with a higher RSI low marks bullish divergence.": "RSI のスイングを見つけ、同じ足の高値または安値を使います。比較するスイングの間隔は 5〜60 本です。価格が高値を切り上げ、RSI が高値を切り下げると弱気のダイバージェンスです。価格が安値を切り下げ、RSI が安値を切り上げると強気です。",
+ "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "初期設定では RSI が 14 本、スイングの左右が各 5 本です。右側の最後の足が確定すると印が表示されます。どちらも調整でき、メインチャートの印はスクリプト設定で非表示にできます。"
 }

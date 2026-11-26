@@ -72,8 +72,8 @@ const about = (): Readonly<Record<ExampleKey, { tip: string; body: readonly stri
   },
   'rsi-divergence': {
     tip: t('Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.'),
-    body: [t('A higher swing high with a lower RSI marks bearish divergence. A lower swing low with a higher RSI marks bullish divergence. The lines appear after the candles to the right of the newer swing have closed.'),
-      t('The default RSI period is 14 candles, with 3 candles on each side of a swing. Both are adjustable. The map markings can be hidden in the script settings.')],
+    body: [t('The script finds swings in RSI and takes the price high or low from the same candles. It compares swings 5 to 60 candles apart. A higher price high with a lower RSI high marks bearish divergence. A lower price low with a higher RSI low marks bullish divergence.'),
+      t('By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.')],
   },
   'delta-histogram': {
     tip: t('Each candle\'s delta, what was bought at market less what was sold, as a bar: up in green where buyers led, down in red where sellers did.'),

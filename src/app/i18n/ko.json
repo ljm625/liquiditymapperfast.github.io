@@ -3397,6 +3397,6 @@
  "How the levels shown here changed over time, whatever kinds the button at the top of the column shows (liquidations, stops, take profits): opens them in the Depth pane.": "여기 표시된 레벨이 시간에 따라 어떻게 바뀌었는지(열 위쪽 버튼에서 고른 종류: 청산, 손절, 익절). 뎁스 패널에서 엽니다.",
  "RSI with divergences": "RSI 다이버전스",
  "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "RSI 행과 가격 차트에 상승 및 하락 다이버전스를 표시하는 와일더 RSI입니다.",
- "A higher swing high with a lower RSI marks bearish divergence. A lower swing low with a higher RSI marks bullish divergence. The lines appear after the candles to the right of the newer swing have closed.": "가격의 고점이 높아지고 RSI가 낮아지면 하락 다이버전스입니다. 가격의 저점이 낮아지고 RSI가 높아지면 상승 다이버전스입니다. 두 번째 고점이나 저점 오른쪽의 봉이 마감된 뒤에 선을 그립니다.",
- "The default RSI period is 14 candles, with 3 candles on each side of a swing. Both are adjustable. The map markings can be hidden in the script settings.": "기본 RSI 기간은 14개 봉이며 스윙 양쪽에는 각각 3개 봉을 사용합니다. 둘 다 조정할 수 있고 스크립트 설정에서 차트의 표식을 숨길 수 있습니다."
+ "The script finds swings in RSI and takes the price high or low from the same candles. It compares swings 5 to 60 candles apart. A higher price high with a lower RSI high marks bearish divergence. A lower price low with a higher RSI low marks bullish divergence.": "RSI에서 스윙을 찾고 같은 봉의 가격 고가 또는 저가를 사용합니다. 5~60봉 떨어진 스윙을 비교합니다. 가격 고점이 높아지고 RSI 고점이 낮아지면 하락 다이버전스입니다. 가격 저점이 낮아지고 RSI 저점이 높아지면 상승 다이버전스입니다.",
+ "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "기본값으로 RSI는 14개 봉, 스윙은 양쪽에 5개 봉을 사용합니다. 오른쪽 마지막 봉이 마감되면 표식이 나타납니다. 두 설정 모두 조정할 수 있고 스크립트 설정에서 메인 차트의 표식을 숨길 수 있습니다."
 }

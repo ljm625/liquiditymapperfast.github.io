@@ -1,6 +1,7 @@
-import { PREVIOUS_CVD_SOURCES, PREVIOUS_HEATMAP_SOURCES, PREVIOUS_VWAP_SOURCES } from './starter-previous.ts';
+import { PAIRED_RSI_SOURCE, PREVIOUS_CVD_SOURCES, PREVIOUS_HEATMAP_SOURCES, PREVIOUS_RSI_SOURCE, PREVIOUS_VWAP_SOURCES } from './starter-previous.ts';
 import { t } from '../i18n.ts';
 import { ROW_DEFAULT, SCRIPT_API, type ScriptRecord } from './records.ts';
+import { RSI_SOURCE } from './rsi.ts';
 
 /**
  * A rolling VWAP with bands: the volume-weighted mean of the candles' typical price over the last candles, moving with them (not anchored to a
@@ -333,12 +334,15 @@ const OLD_HEATMAP_OPTIONS: Readonly<Record<string, string>> = { lowColor: 'rgb(4
  */
 export function updateStarters(list: ScriptRecord[]): ScriptRecord[] {
   return list.map(r => {
+    const source = r.source.replace(/\r\n?/g, '\n');
+    // The RSI example now takes prices at confirmed RSI swings. Keep the saved options.
+    if (source === PREVIOUS_RSI_SOURCE || source === PAIRED_RSI_SOURCE) return { ...r, source: RSI_SOURCE };
     // An untouched VWAP with bands, the starter or a copy added from the examples: the current text, its settings as they were.
-    if (PREVIOUS_VWAP_SOURCES.includes(r.source.replace(/\r\n?/g, '\n'))) return { ...r, source: VWAP_SOURCE, api: Math.max(r.api, SCRIPT_API) };
+    if (PREVIOUS_VWAP_SOURCES.includes(source)) return { ...r, source: VWAP_SOURCE, api: Math.max(r.api, SCRIPT_API) };
     // An untouched spot and perpetual CVD from before its tags (without labels, or with labels at the lines' ends): the current one, its
     // colours and switches kept (its "?" describes the labels by its id).
-    if (PREVIOUS_CVD_SOURCES.includes(r.source.replace(/\r\n?/g, '\n'))) return { ...r, source: CVD_SOURCE, api: Math.max(r.api, SCRIPT_API) };
-    if (r.id !== HEATMAP_ID || !PREVIOUS_HEATMAP_SOURCES.includes(r.source.replace(/\r\n?/g, '\n'))) return r;
+    if (PREVIOUS_CVD_SOURCES.includes(source)) return { ...r, source: CVD_SOURCE, api: Math.max(r.api, SCRIPT_API) };
+    if (r.id !== HEATMAP_ID || !PREVIOUS_HEATMAP_SOURCES.includes(source)) return r;
     const old = Object.keys(r.options).filter(k => Object.prototype.hasOwnProperty.call(OLD_HEATMAP_OPTIONS, k));
     if (old.some(k => r.options[k] !== OLD_HEATMAP_OPTIONS[k])) return r;
     // Its new text reads `theme`, which version 2 brought: a page older than that says so rather than run it.
