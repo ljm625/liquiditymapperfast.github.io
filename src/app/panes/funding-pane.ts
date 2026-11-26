@@ -17,7 +17,7 @@ import { currentCoin } from '../coin.ts';
 import { VENUE_LINE, venueLabel } from '../venues.ts';
 import { drawVenueMark } from '../venue-marks.ts';
 import { instrumentIdFor } from '../../shared/coins.ts';
-import { FUNDING_VENUES, FundingSource, buyerShare, continuousFunding, cutAt, fundingAt, fundingBase, fundingIn, fundingMedian, fundingTail, fundingVenueOf, hasPremium, medianIn, medianNeeds, rowStart, showsEvery, type FundingNow, type FundingRow, type FundingVenue, type FundingView, type MedianStep, type PremiumRow, type VenueFunding } from '../funding.ts';
+import { FUNDING_VENUES, FundingSource, buyerShare, continuousFunding, cutAt, fundingAt, fundingBase, fundingIn, fundingMedian, fundingTail, fundingVenueOf, hasPremium, medianIn, medianNeeds, rowStart, showsEvery, stepRuns, type FundingNow, type LineStep, type FundingRow, type FundingVenue, type FundingView, type MedianStep, type PremiumRow, type VenueFunding } from '../funding.ts';
 import type { HourOpens, NlnsSource } from '../delta/nlns-source.ts';
 import { coinSize } from '../delta/nlns.ts';
 import { pageNow, replaying } from '../replay/clock.ts';
@@ -181,7 +181,7 @@ export class FundingPane extends TimePane {
   readonly #tableBox = document.createElement('input');
   /** The venues the table's rows were drawn for. */
   #tableVenues: readonly FundingVenue[] = [];
-  readonly #table = new PaneTable({ canvas: this.canvas, left: () => leftGutter(this.store.state), rangeGesture: () => this.rangeGesture, invalidate: () => this.invalidate() }, row => { const venue = this.#tableVenues[row]; if (venue) this.store.set({ fundingVenue: venue }); });
+  readonly #table = new PaneTable({ canvas: this.canvas, left: () => leftGutter(this.store.state), rangeGesture: () => this.rangeGesture, invalidate: () => this.invalidate(), defer: fn => this.deferOverlay(fn) }, row => { const venue = this.#tableVenues[row]; if (venue) this.store.set({ fundingVenue: venue }); });
 
   /** `nlns`: the NL/NS model the OI and Delta panes read too (delta/nlns-source.ts). */
   constructor(host: HTMLElement, store: Store, view: View, private readonly nlns: NlnsSource) {
@@ -344,24 +344,27 @@ export class FundingPane extends TimePane {
     // Each venue's settlements and the rate accruing now, without its premium candles (the costly read); a venue that fails costs its own line only.
     const shown = listed.map(x => { const data = this.#funding.view(x, coin.markets[x]!, tf, v.t0, v.t1, Date.now(), false); views.set(x, data); return { id: x, data, ...fundingShownAt(data, now, replaying()) }; });
     const need = medianNeeds(listed.length), venues = shown.map(s => ({ rows: s.rows, forming: s.forming })), median = this.#medianOf(venues, shown.map(x => x.data.rows), v.t0, v.t1, now, need);
-    const hover = state.hover, at = hover ? Math.min(hover.t, now) : now;
+    const hover = state.hover, at = hover ? Math.min(hover.t, now) : now, cut = this.#medianMemo?.clock ?? now;
     // Scale: zero, the base rate, and every venue's steps in view: its settlements, then its rate under way (`fundingTail`: the rate now, or in a replay the newest record carried to the clock), dashed.
     const top = 6, bottom = ph - 6;
     let lo = Math.min(0, BASE), hi = Math.max(0, BASE), any = false;
     const drawn = shown.map(s => {
       const steps: { x0: number; x1: number; per8h: number; forming: boolean; t0: number; t1: number }[] = [];
       for (let i = cutAt(s.rows, v.t0, false); i < s.rows.length; i++) { const r = s.rows[i]!, start = rowStart(s.rows, i); if (start > v.t1) break; steps.push({ x0: v.xOf(start, pw), x1: v.xOf(r.t, pw), per8h: r.per8h, forming: false, t0: start, t1: r.t }); }
-      const tail = fundingTail(s.rows, s.forming, now);
-      if (tail && tail.end > tail.start && tail.end >= v.t0 && tail.start <= v.t1) steps.push({ x0: v.xOf(tail.start, pw), x1: v.xOf(tail.end, pw), per8h: tail.per8h, forming: true, t0: tail.start, t1: tail.end });
+      // Drawn to where the median ends (now, to the minute it was last worked out), as the lines without a rate under way do; to its
+      // settlement the exchanges' ran hours past them. One that starts after that (a clock behind the venue's) is drawn whole, as before.
+      const tail = fundingTail(s.rows, s.forming, now), tailEnd = tail ? (tail.start >= cut ? tail.end : Math.min(tail.end, cut)) : 0;
+      if (tail && tail.end > tail.start && tailEnd >= v.t0 && tail.start <= v.t1) steps.push({ x0: v.xOf(tail.start, pw), x1: v.xOf(tailEnd, pw), per8h: tail.per8h, forming: true, t0: tail.start, t1: tailEnd });
       for (const st of steps) { lo = Math.min(lo, st.per8h); hi = Math.max(hi, st.per8h); any = true; }
       return { id: s.id, steps };
     });
     if (!any) {
-      if (state.fundingTable && this.#drawTable(null, null, tf, at, now, !!hover, { views, venues, median: medianIn(venues, at, now, need) })?.plate) { setHtml(readout, ''); return; }
+      const placed = state.fundingTable ? this.#drawTable(null, null, tf, at, now, !!hover, { views, venues, median: medianIn(venues, at, now, need) }) : null;
+      if (placed?.plate && placed.left < 80) { setHtml(readout, ''); return; }
       ctx.fillStyle = p.muted; ctx.textAlign = 'left';
       const failed = shown.filter(s => s.data.failed).map(s => venueLabel(s.id));
       const said = shown.some(s => s.data.loading) ? t('Reading funding…') : failed.length === shown.length ? t('{venue} did not answer: asked again in a minute.', { venue: failed.join(', ') }) : t('No funding in view.');
-      ctx.fillText(fitText(text => ctx.measureText(text).width, said, pw - 24), 12, ph / 2); setHtml(readout, '');
+      ctx.fillText(fitText(text => ctx.measureText(text).width, said, Math.max(40, (placed ? Math.min(pw, placed.left - 8) : pw) - 24)), 12, ph / 2); setHtml(readout, '');
       return;
     }
     // A floor under the scale's span: a view of tiny rates (Deribit's) would otherwise ask for more decimals than the ticks are given.
@@ -377,26 +380,16 @@ export class FundingPane extends TimePane {
     for (const d of drawn) {
       if (!d.steps.length) continue;
       ctx.strokeStyle = VENUE_LINE[d.id] ?? p.muted; ctx.lineWidth = 1.25; ctx.globalAlpha = 0.85;
-      for (const forming of [false, true]) {
-        ctx.setLineDash(forming ? [4, 3] : []); ctx.beginPath();
-        let lastT = NaN;
-        for (const st of d.steps) { if (st.forming !== forming) continue; const yy = y(st.per8h); if (st.t0 === lastT) ctx.lineTo(st.x0, yy); else ctx.moveTo(st.x0, yy); ctx.lineTo(st.x1, yy); lastT = st.t1; }
-        ctx.stroke();
-      }
-      ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.lineWidth = 1;
+      this.#strokeSteps(d.steps, y, pw, [4, 3]);
+      ctx.globalAlpha = 1; ctx.lineWidth = 1;
       const last = d.steps[d.steps.length - 1]!;
       // In a replay a carried line ends at the moment shown, and right of it the mask covers the plot: the mark stays left of it (review round 2).
       if (last.x1 > -8) ends.push({ id: d.id, x: Math.min(pw - 8, last.x1 + 8, replaying() ? v.xOf(now, pw) - 8 : Infinity), y: y(last.per8h) });
     }
     // The median, thick in the text colour over them: joined where one step follows the next, dashed where a rate under way counts.
     ctx.strokeStyle = p.text; ctx.lineWidth = 2.5;
-    for (const forming of [false, true]) {
-      ctx.setLineDash(forming ? [5, 3] : []); ctx.beginPath();
-      let lastT = NaN;
-      median.forEach((s, i) => { if (s.forming !== forming) return; const m = medianSteps[i]!, yy = y(s.per8h); if (s.t0 === lastT) ctx.lineTo(m.x0, yy); else ctx.moveTo(m.x0, yy); ctx.lineTo(m.x1, yy); lastT = s.t1; });
-      ctx.stroke();
-    }
-    ctx.setLineDash([]); ctx.lineWidth = 1;
+    this.#strokeSteps(median, y, pw, [5, 3]);
+    ctx.lineWidth = 1;
     ends.sort((a, b) => a.y - b.y);
     const near = (a: { x: number }, b: { x: number }): boolean => Math.abs(a.x - b.x) < 14;
     // Down, then pushed past the bottom pulled back up from it, so the marks do not pile on one row there; again until nothing moves ("near" is
@@ -410,7 +403,8 @@ export class FundingPane extends TimePane {
     for (const e of ends) drawVenueMark(ctx, e.id, e.x, Math.max(top + 6, Math.min(bottom - 6, e.y)), 12);
     // The median at the time read, from the venues there (not from the line drawn for the view, which ends where the view does).
     const medianNow = medianIn(venues, at, now, need);
-    if (hover && this.pointer && medianNow) this.#dot(v.xOf(at, pw), y(medianNow.per8h), p.text);
+    // On the line: at now it ends at the minute the median was worked out (`cut`).
+    if (hover && this.pointer && medianNow) this.#dot(v.xOf(Math.min(at, cut), pw), y(medianNow.per8h), p.text);
     ctx.restore();
     labels();
     if (hover && this.pointer && hover.t > at) this.cursorT = at;
@@ -418,7 +412,7 @@ export class FundingPane extends TimePane {
     // beside one that lost a column, the card stays. The left tag stays unless the table is on a plate there.
     const card = fundingAllCardLines({ time: at, median: medianNow, need, venues: shown.map(s => { const r = fundingIn(s.rows, s.forming, at, now); return { id: s.id, name: venueLabel(s.id), per8h: r?.per8h ?? null, forming: r?.forming ?? false }; }) });
     const placed = state.fundingTable ? this.#drawTable(null, null, tf, at, now, !!hover, { views, venues, median: medianNow }, tableLines(card)) : null;
-    this.leftTag = placed?.plate !== true;
+    this.leftTag = !(placed?.plate && placed.left < 64);
     if (hover && this.pointer && !placed?.complete) this.#lines = card;
     const tone = (x: number): string => x > 0 ? 'bid' : x < 0 ? 'ask' : '';
     setHtml(readout, medianNow
@@ -433,13 +427,24 @@ export class FundingPane extends TimePane {
    * every frame, up to 14 ms on a view of months (review round 3). The clip leaves out what lies outside the view. Keyed on the source's arrays
    * and the lengths shown of them: a replay's cut is a new slice every frame (round 2).
    */
-  #medianMemo: { key: unknown[]; w0: number; w1: number; steps: MedianStep[] } | null = null;
+  #medianMemo: { key: unknown[]; w0: number; w1: number; clock: number; steps: MedianStep[] } | null = null;
+
+  /** A step line in the current stroke style (`stepRuns`): solid where settled, `dash` where a rate under way, joined where one step follows the next. */
+  #strokeSteps(steps: readonly LineStep[], y: (value: number) => number, pw: number, dash: number[]): void {
+    const { ctx, view: v } = this;
+    for (const run of stepRuns(steps)) {
+      ctx.setLineDash(run.forming ? dash : []); ctx.beginPath();
+      run.points.forEach((q, i) => { const x = v.xOf(q.t, pw), yy = y(q.per8h); if (i) ctx.lineTo(x, yy); else ctx.moveTo(x, yy); });
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
   #medianOf(venues: readonly VenueFunding[], sources: readonly (readonly FundingRow[])[], t0: number, t1: number, now: number, need: number): MedianStep[] {
     const key: unknown[] = [need, Math.floor(now / 60_000), ...venues.flatMap((x, i) => [sources[i], x.rows.length, x.forming])];
     const memo = this.#medianMemo, span = t1 - t0;
     if (memo && t0 >= memo.w0 && t1 <= memo.w1 && span * 8 >= memo.w1 - memo.w0 && memo.key.length === key.length && memo.key.every((k, i) => k === key[i])) return memo.steps;
     const w0 = t0 - span / 2, w1 = t1 + span / 2, steps = fundingMedian(venues, w0, w1, now, need);
-    this.#medianMemo = { key, w0, w1, steps };
+    this.#medianMemo = { key, w0, w1, clock: now, steps };
     return steps;
   }
 
@@ -463,8 +468,9 @@ export class FundingPane extends TimePane {
     const visRows = visIdx.map(i => rows[i]!), visPremium = premium.slice(cutAt(premium, v.t0 - data.premiumMs, false), cutAt(premium, v.t1));
     const hover = state.hover, at = hover ? Math.min(hover.t, now) : now;
     if (!visRows.length && !visPremium.length && !formShown) {
-      // The other venues stay in reach: a click on a row that does not answer is no way to lose the table. On a plate the table stands where the words would.
-      if (state.fundingTable && this.#drawTable(venue, data, tf, at, now, !!hover)?.plate) { setHtml(readout, ''); return; }
+      // The other venues stay in reach: a click on a row that does not answer is no way to lose the table. Only a plate reaching the left end hides the words.
+      const placed = state.fundingTable ? this.#drawTable(venue, data, tf, at, now, !!hover) : null;
+      if (placed?.plate && placed.left < 80) { setHtml(readout, ''); return; }
       say(data.failed ? t('{venue} did not answer: asked again in a minute.', { venue: name }) : data.loading ? t('Reading funding…') : t('No funding in view.'));
       return;
     }
@@ -511,18 +517,16 @@ export class FundingPane extends TimePane {
       ctx.stroke(); ctx.lineWidth = 1;
     }
     // Funding as steps: each settlement over the interval it paid for, joined where one follows the other; the one accruing now dashed.
-    ctx.strokeStyle = p.text; ctx.lineWidth = 2; ctx.beginPath();
-    let last: FundingRow | null = null;
-    for (const i of visIdx) {
-      const r = rows[i]!, start = rowStart(rows, i), x0 = v.xOf(start, pw), x1 = v.xOf(r.t, pw), yy = y(r.per8h);
-      if (last && last.t === start) ctx.lineTo(x0, yy); else ctx.moveTo(x0, yy);
-      ctx.lineTo(x1, yy); last = r;
+    // The dashed step joins the last settled one where it starts at that settlement (it is drawn to its own settlement: one line, nothing ends at now beside it).
+    const line: LineStep[] = visIdx.map(i => ({ t0: rowStart(rows, i), t1: rows[i]!.t, per8h: rows[i]!.per8h, forming: false }));
+    if (forming && formShown) line.push({ t0: formStart, t1: formEnd, per8h: forming.per8h, forming: true });
+    ctx.strokeStyle = p.text; ctx.lineWidth = 2;
+    for (const run of stepRuns(line)) {
+      ctx.setLineDash(run.forming ? [4, 3] : []); ctx.globalAlpha = run.forming ? 0.8 : 1; ctx.beginPath();
+      run.points.forEach((q, i) => { const x = v.xOf(q.t, pw), yy = y(q.per8h); if (i) ctx.lineTo(x, yy); else ctx.moveTo(x, yy); });
+      ctx.stroke();
     }
-    ctx.stroke();
-    if (forming && formShown) {
-      ctx.setLineDash([4, 3]); ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.moveTo(v.xOf(formStart, pw), y(forming.per8h)); ctx.lineTo(v.xOf(formEnd, pw), y(forming.per8h)); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
-    }
-    ctx.lineWidth = 1;
+    ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.lineWidth = 1;
     // Where the cursor's time meets the funding and the premium.
     const { row: shownRow, forming: isForming } = fundingAt(rows, forming, at, now);
     // The premium under way is the venue's own now, where it says it (the last candle's is up to a candle old).
@@ -574,7 +578,7 @@ export class FundingPane extends TimePane {
     // unless the table is on a plate there.
     const card = fundingCardLines({ time: at, venue: name, row: shownRow, forming: isForming, premium: premiumAt, opens: hourOpens, coin: coin.coin, continuous: continuousFunding(venue), band: hasPremium(venue) });
     const placed = state.fundingTable ? this.#drawTable(venue, data, tf, at, now, !!hover, undefined, headed(name, tableLines(card))) : null;
-    this.leftTag = placed?.plate !== true;
+    this.leftTag = !(placed?.plate && placed.left < 64);
     if (hover && this.pointer && !placed?.complete) this.#lines = card;
     const tone = (x: number): string => x > 0 ? 'bid' : x < 0 ? 'ask' : '';
     const parts: string[] = [];
