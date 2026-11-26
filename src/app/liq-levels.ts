@@ -772,6 +772,7 @@ export class LiqLevelsSource implements LiqSet {
   #right: LiqView | null = null;
   #rightState: LiqState = 'idle';
   #rightBlame: 'liq' | 'orders' = 'liq';
+  #simulation = false;
   #url = '';
   #pending = false;
   #nextAt = 0;
@@ -804,6 +805,9 @@ export class LiqLevelsSource implements LiqSet {
 
   /** What is drawn (the effective view: the free view without Plus; a split's left column). */
   get view(): LiqView { return this.#view; }
+
+  /** An open price simulation also needs everyone's stop and take-profit file, through the same access and refresh rules. */
+  setSimulation(on: boolean): void { this.#simulation = on; }
 
   /** The liquidation levels of a view's traders (every position's, or a group's), or null while they are not held. */
   #liqLayer(v: LiqView = this.#view): Layer | null {
@@ -989,7 +993,8 @@ export class LiqLevelsSource implements LiqSet {
     this.#settle();
     // The candles from the earliest snapshot drawn (the stops' is often older than the liquidations'), a split's right column's included.
     const other = this.#right;
-    const from = [this.#main(), takesBeside(this.#view) ? this.#orders()?.takes ?? null : null, curveOf(this.#view) === 'both' ? this.#orders()?.stops ?? null : null, ...(other ? [this.#mainOf(other)] : [])]
+    const from = [this.#main(), takesBeside(this.#view) ? this.#orders()?.takes ?? null : null, curveOf(this.#view) === 'both' ? this.#orders()?.stops ?? null : null,
+      ...(other ? [this.#mainOf(other)] : []), ...(this.#simulation ? [this.#free, this.#triggers.held?.stops ?? null] : [])]
       .reduce((m, layer) => layer ? Math.min(m, layer instanceof SumLayer ? Math.min(layer.a.levels.asOf, layer.b.levels.asOf) : layer.levels.asOf) : m, Infinity);
     if (Number.isFinite(from)) {
       const id = instrumentIdFor('hyperliquid', BTC), listing = BTC.markets.hyperliquid;
@@ -1008,7 +1013,7 @@ export class LiqLevelsSource implements LiqSet {
     // What the view needs and what a split's right column needs, each file once.
     const views = this.#right ? [this.#view, this.#right] : [this.#view];
     this.#askPart(this.#groups, views.some(v => v.liq && v.group !== 'all'), 'groups', onChange);
-    this.#askPart(this.#triggers, views.some(v => ordersShown(v) && v.group === 'all'), 'triggers', onChange);
+    this.#askPart(this.#triggers, this.#simulation || views.some(v => ordersShown(v) && v.group === 'all'), 'triggers', onChange);
     this.#askPart(this.#orderGroups, views.some(v => ordersShown(v) && v.group !== 'all'), 'triggersGroups', onChange);
   }
 

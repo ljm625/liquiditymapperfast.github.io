@@ -3398,5 +3398,11 @@
  "RSI with divergences": "RSI 다이버전스",
  "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "RSI 행과 가격 차트에 상승 및 하락 다이버전스를 표시하는 와일더 RSI입니다.",
  "The script finds swings in RSI and takes the price high or low from the same candles. It compares swings 5 to 60 candles apart. A higher price high with a lower RSI high marks bearish divergence. A lower price low with a higher RSI low marks bullish divergence.": "RSI에서 스윙을 찾고 같은 봉의 가격 고가 또는 저가를 사용합니다. 5~60봉 떨어진 스윙을 비교합니다. 가격 고점이 높아지고 RSI 고점이 낮아지면 하락 다이버전스입니다. 가격 저점이 낮아지고 RSI 저점이 높아지면 상승 다이버전스입니다.",
- "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "기본값으로 RSI는 14개 봉, 스윙은 양쪽에 5개 봉을 사용합니다. 오른쪽 마지막 봉이 마감되면 표식이 나타납니다. 두 설정 모두 조정할 수 있고 스크립트 설정에서 메인 차트의 표식을 숨길 수 있습니다."
+ "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "기본값으로 RSI는 14개 봉, 스윙은 양쪽에 5개 봉을 사용합니다. 오른쪽 마지막 봉이 마감되면 표식이 나타납니다. 두 설정 모두 조정할 수 있고 스크립트 설정에서 메인 차트의 표식을 숨길 수 있습니다.",
+ "Price simulation": "가격 시뮬레이션",
+ "Target price": "목표 가격",
+ "Liq USD": "청산액 USD",
+ "Reset": "초기화",
+ "Liquidations here divided by liquidations the same distance away on the other side.": "목표 방향의 청산액을 반대 방향의 같은 가격 거리 내 청산액으로 나눈 값입니다.",
+ "Price simulation needs a live BTC market quoted in dollars.": "가격 시뮬레이션에는 달러로 표시되는 실시간 BTC 시장이 필요합니다."
 }

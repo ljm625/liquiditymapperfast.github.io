@@ -3644,5 +3644,11 @@
  "RSI with divergences": "RSI com divergências",
  "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "RSI de Wilder com divergências altistas e baixistas na linha do RSI e no gráfico de preços.",
  "The script finds swings in RSI and takes the price high or low from the same candles. It compares swings 5 to 60 candles apart. A higher price high with a lower RSI high marks bearish divergence. A lower price low with a higher RSI low marks bullish divergence.": "O script encontra os extremos do RSI e usa a máxima ou mínima de preço das mesmas velas. Ele compara extremos separados por 5 a 60 velas. Um topo de preço mais alto com um topo de RSI mais baixo indica divergência baixista. Um fundo de preço mais baixo com um fundo de RSI mais alto indica divergência altista.",
- "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "Por padrão, o RSI usa 14 velas e cada extremo usa 5 velas de cada lado. As marcas aparecem no fechamento da última vela à direita. Ambos os ajustes podem ser alterados. As marcas no gráfico podem ser ocultadas nas configurações do script."
+ "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "Por padrão, o RSI usa 14 velas e cada extremo usa 5 velas de cada lado. As marcas aparecem no fechamento da última vela à direita. Ambos os ajustes podem ser alterados. As marcas no gráfico podem ser ocultadas nas configurações do script.",
+ "Price simulation": "Simulação de preço",
+ "Target price": "Preço-alvo",
+ "Liq USD": "Liq. USD",
+ "Reset": "Restaurar",
+ "Liquidations here divided by liquidations the same distance away on the other side.": "Liquidações até o alvo divididas pelas liquidações à mesma distância no sentido oposto.",
+ "Price simulation needs a live BTC market quoted in dollars.": "A simulação de preço precisa de um mercado de BTC ao vivo cotado em dólares."
 }

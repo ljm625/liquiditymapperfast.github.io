@@ -56,7 +56,7 @@ import { openMenu, type MenuItem } from '../menu.ts';
 import { blockMsOf, editScope, withEdits } from '../tpo/settings.ts';
 import { currentCoin, scaledUsd } from '../coin.ts';
 import { liqLevelsUrl } from '../liq-url.ts';
-import { curveOf, groupName, heldBack, kindName, levelsDescription, liveAsk, liveSplit, liveView, narrowView, pairKey, plusOn, viewKey, viewParts, type LiqPair, type LiqView } from '../liq-view.ts';
+import { FREE_VIEW, curveOf, groupName, heldBack, kindName, levelsDescription, liveAsk, liveSplit, liveView, narrowView, pairKey, plusOn, viewKey, viewParts, type LiqPair, type LiqView } from '../liq-view.ts';
 import { columnNotes, liqWhy, narrowNote, ordersAbsent, pairDescription, splitName, splitNotes, staleOfAll, staleWords, subNames } from '../liq-words.ts';
 import { levelsOrderSide } from '../order-side.ts';
 import { mirrorSplits, readingTexts, setBoxLines, stripeBoxLines } from '../liq-box.ts';
@@ -73,18 +73,18 @@ import { liquidationCover, type LiquidationDays } from '../liq-days.ts';
 import { quietMs } from '../quiet.ts';
 import { answerMedian, emphasisFloor, medianRow, splitStyles } from '../traded/emphasis.ts';
 import { BROWSER_RETENTION_MS, RETENTION_MS } from '../../shared/recorder.ts';
-import { MAX_BACK_MS, barMsFor, keyLines, neededFrom, type KeyLine } from '../keylevels/levels.ts';
+import { MAX_BACK_MS, barMsFor, keyLines, lineEnd, neededFrom, type KeyLine } from '../keylevels/levels.ts';
 import { anyLine } from '../keylevels/settings.ts';
 import { historyTarget, profileCompanion, profileTarget, type HistoryTarget, type KeyLevelHistory } from '../keylevels/history.ts';
 import { TakerRows } from '../measures/taker-rows.ts';
-import { paintKeyLevels, paintKeyTags, periodDate, placeKeyTags, underTag, type KeyTag } from '../keylevels/paint.ts';
+import { codeOf, paintKeyLevels, paintKeyTags, periodDate, placeKeyTags, underTag, type KeyTag } from '../keylevels/paint.ts';
 import { ANCHOR_REACH_MS, anchorBars, candleStartAt, mergeVwapBars, rollingBarMs, rollingFrom, rollingSeries, sessionsOf, vwapBarMs, vwapBarsOf, vwapSeries, whaleSeries, type RollingState, type VwapBar, type VwapPoint } from '../vwap/vwap.ts';
 import { vwapTargets, type VwapMarketState } from '../vwap/markets.ts';
 import { anchorsOf } from '../vwap/settings.ts';
 import { resolveRule, ruleCode, ruleKey, ruleSpan, searchBarMs, type Anchor, type AnchorRule, type Resolved } from '../anchors/anchors.ts';
 import { FootprintMarks } from '../footprint/marks.ts';
 import { FootprintRuns, paintRuns } from '../footprint/runs.ts';
-import { cutForReplay, paintVwap, type VwapLine } from '../vwap/paint.ts';
+import { cutForReplay, paintVwap, vwapCode, type VwapLine } from '../vwap/paint.ts';
 import { DRAG_MIN_PX, selects } from '../range/selection.ts';
 import { drawVenueMark } from '../venue-marks.ts';
 import { draftLabel } from '../range/stats.ts';
@@ -111,6 +111,8 @@ import { pixelRatio, sharpens } from '../pixel-ratio.ts';
 import { TpoLayer, type TpoFrame } from '../tpo/layer.ts';
 import type { TpoInfo } from '../tpo/panel.ts';
 import { HEAD_ALPHA, HEAD_INSET, HEAD_PITCH, PLATE_H, TOOLS_TOP, bodyFont, firstLine, headBand, liqHeading, nameFont, plateTop, roleFont, roleInk, rowNameSize, rowNameTop, splitNames, toolsRight, type HeadLine } from '../map-top.ts';
+import { PriceSimulationPanel, paintSimulationTarget, type SimulationRead } from '../price-simulation-panel.ts';
+import { togglePanel } from '../ui.ts';
 
 /** The colour of a flag on a candle's wick: amber reads on every theme and is neither side's colour. */
 const TRAP_COLOR = '#f5a524';
@@ -405,6 +407,7 @@ export class HeatPane {
   #historyNote: { x0: number; x1: number; top: number } | null = null;
   /** Where this frame's note under the legend (Liquidation levels') stands, laid out before the stripe's captions so they keep clear of it. */
   #liqNoteBox: { x0: number; x1: number; top: number; bottom: number } | null = null;
+  #simulation: PriceSimulationPanel | null = null;
   /** Each lane of the stripe's rows in view as last painted (the levels', the take profits', a split's right set's), kept by their keys (liq-stripe.ts). */
   readonly #liqHeld: StripeHeld = { levels: null, takes: null, right: null };
   /** The wide liquidation column as last drawn with its curves (its left and width, the curves' width, their dollars at full width), for `#paintLiqReadout`. */
@@ -1490,6 +1493,15 @@ export class HeatPane {
     this.#paintProfileAnchor(ctx, pw, ph, this.#tradedPalette(state));
     this.#paintLayers(ctx, state, pw, ph);
     this.#laneEdge = null;
+    const simulationOpen = !!this.#simulation?.root.isConnected;
+    const simulationPrice = this.#simulation && !replaying() && currentCoin().coin === 'BTC' ? this.#dollarPrice(state) : NaN;
+    const simulate = simulationOpen && simulationPrice > 0;
+    if (state.liqLevels.on || simulate) {
+      const src = this.hub.liqLevels, ask = liveAsk(state.liqLevels);
+      src.setSimulation(simulate);
+      src.ensure(currentCoin(), () => this.invalidate(), ask.view, ask.right);
+      if (src.state !== 'off' && src.state !== 'other-coin' && !replaying()) src.observe(this.#dollarPrice(state));
+    } else if (simulationOpen) this.hub.liqLevels.setSimulation(false);
     if (state.liqLevels.on) this.#paintLiquidationLevels(ctx, state, pw, ph);
     // The corner tools' row follows the lanes (`#fitCorner`, at the next frame's start): where this frame's lanes want it elsewhere, one more frame.
     if (this.#toolsLive) { const at = this.#cornerAt(pw); if (at.right !== this.#toolsAt.right || at.anchored !== this.#toolsAt.anchored) this.invalidate(); }
@@ -1531,6 +1543,12 @@ export class HeatPane {
     this.#vwapTags = state.vwap.on ? paintVwap(ctx, this.#vwapLines(state), v, pw, ph, p, state.vwap, this.#labels, state.vwap.anchors[currentCoin().coin] ?? []) : [];
     this.scriptLayer?.(ctx, pw, ph);
     this.#drawTags = this.draw ? paintDrawings(ctx, this.draw, this.drawProjection(), p) : [];
+    if (this.#simulation) {
+      if (simulationOpen) this.#simulation.sync(() => this.#readSimulation(state, simulationPrice));
+      const target = this.#simulation.target;
+      if (simulationPrice > 0 && target !== null && simulationPrice !== target && pw > 24 && ph > 24) paintSimulationTarget(ctx, p, pw, ph,
+        this.#liqStripeLeft(pw), v.yOf(simulationPrice, ph), v.yOf(target, ph), target);
+    }
     // Replay: nothing after its moment is shown (the heatmap under this canvas included), and a line marks it.
     if (replaying()) {
       const x = Math.max(0, Math.min(pw, v.xOf(pageNow(), pw)));
@@ -2410,12 +2428,9 @@ export class HeatPane {
     const src = this.hub.liqLevels, p = this.#palette, v = this.view, view = liveView(state.liqLevels);
     // Nothing drawn answers the pointer until this frame draws it again (another coin, a replay: neither lane stands).
     this.#liqLanes = null; this.#liqRightLane = null; this.#liqNoteBox = null;
-    const ask = liveAsk(state.liqLevels);
-    src.ensure(currentCoin(), () => this.invalidate(), ask.view, ask.right);
     // They are on unless switched off, so where they cannot be (no address, another coin, a replay) the map says nothing: the button's panel
     // says why.
     if (src.state === 'off' || src.state === 'other-coin' || replaying()) return;
-    src.observe(this.#dollarPrice(state));
     // Under a split of liquidations beside stops the stripe draws both (a lane each), so the note says both, and when their orders stood.
     // Everyone beside the profitable traders draws a lane each where the stripe has room for them (`stripeSplitRoom`), else everyone's alone.
     const pair = liveSplit(state.liqLevels), plan = stripePlan(pair, stripeSplitRoom(state));
@@ -2534,6 +2549,55 @@ export class HeatPane {
   #liqPrice(state: AppState): number {
     const own = this.#dollarPrice(state);
     return own > 0 ? own : this.hub.liqLevels.lastPrice();
+  }
+
+  openPriceSimulation(anchor: HTMLElement): void {
+    togglePanel(anchor, { title: t('Price simulation'), width: 650, align: 'right', stays: true, onClose: () => {
+      this.hub.liqLevels.setSimulation(false);
+      this.invalidate();
+    } }, (_tools, body) => {
+      this.#simulation ??= new PriceSimulationPanel(() => this.invalidate());
+      body.append(this.#simulation.root);
+      this.invalidate();
+    });
+  }
+
+  /** Chart targets and the latest everyone snapshots, independent of the chart's selected kinds or split. */
+  #readSimulation(state: AppState, price: number): SimulationRead {
+    const empty = { liq: null, stops: null, takes: null };
+    if (!(price > 0)) return { price, targets: [], levels: empty, status: t('Price simulation needs a live BTC market quoted in dollars.') };
+    const src = this.hub.liqLevels, now = pageNow();
+    const liq = src.setOf(FREE_VIEW), member = plusOn();
+    const stops = member ? src.setOf({ ...FREE_VIEW, liq: false, stops: true }) : null;
+    const takes = member ? src.setOf({ ...FREE_VIEW, liq: false, takes: true }) : null;
+    const standing = (set: LiqSet | null): LiqStanding | null => set?.state === 'ready' && src.state !== 'off' ? set.standing() : null;
+    const levels = { liq: standing(liq), stops: standing(stops), takes: standing(takes) };
+    const say = (set: LiqSet | null, at: number | null): string => {
+      if (src.state === 'off' || !set) return t('Unavailable');
+      if (set.state === 'stale') return t('Out of date');
+      if (set.state === 'loading') return t('Loading…');
+      if (set.state !== 'ready' || at === null) return t('Unavailable');
+      return `${clock(at, true)}${set.outOfDate() ? ` · ${t('Out of date')}` : ''}`;
+    };
+    const targets: SimulationRead['targets'][number][] = [];
+    if (state.vwap.on) for (const line of this.#vwapLines(state)) {
+      const last = line.points.at(-1);
+      if (line.kind === 'rolling' && line.live && last) targets.push({ id: line.key, name: vwapCode(line), price: last.vwap });
+    }
+    if (state.keyLevels.on) {
+      const { zone } = this.#keyLevelContext(state);
+      for (const line of this.#keyLevelLines(state)) if (line.from <= now && lineEnd(line) > now) {
+        const code = codeOf(line), name = line.to <= now ? `${code} · ${periodDate(line.of, line.period, zone)}` : code;
+        targets.push({ id: `key:${line.window}:${code}`, name, price: line.price });
+      }
+    }
+    for (const tag of this.#valueTags) if (/\|(prev-)?poc$/.test(tag.key)) targets.push({ id: `value:${tag.key}`, name: tag.text, price: this.view.pOf(tag.y, this.plotH) });
+    for (const line of this.draw?.shown() ?? []) if (line.kind === 'level' && line.text.trim() && (line.extendLeft || line.points[0]!.t <= now)) {
+      targets.push({ id: `draw:${line.id}`, name: line.text, price: line.points[0]!.p });
+    }
+    let status = `${groupName('all')} · ${t('Price')} ${fmtPrice(price)} · ${t('Liquidations')} ${say(liq, liq.asOfs().liq)} · ${t('Stops and take profits')} ${say(stops, stops?.asOfs().orders ?? null)}`;
+    if ((levels.liq || levels.stops || levels.takes) && src.candlesLate()) status += ` · ${t('Hyperliquid\'s candles could not be read, so a level price has passed may still show.')}`;
+    return { price, targets, levels, status };
   }
 
   /**

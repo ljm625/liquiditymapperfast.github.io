@@ -175,6 +175,22 @@ function service(files: Record<string, LiqAnswer | (() => LiqAnswer)>, pass: { v
 const U = plusUrls(LEVELS_URL)!;
 const view = (v: Partial<LiqView>): LiqView => ({ ...FREE_VIEW, ...v });
 
+test('price simulation reads everyone’s own stops and take profits without changing the liquidation view', async () => {
+  const pass = { value: null as string | null };
+  const s = service({ [U.triggers]: { status: 200, body: triggers(STOPS, TAKES) } }, pass);
+  s.src.ensure(BTC, () => {}); await tick();
+  s.src.setSimulation(true);
+  s.src.ensure(BTC, () => {}); await tick();
+  assert.deepEqual(s.asked.map(a => a.url), [LEVELS_URL]);
+  pass.value = 'v1.pass.sig';
+  s.src.ensure(BTC, () => {}); await tick();
+  assert.deepEqual(s.asked.slice(1), [{ url: U.triggers, pass: 'v1.pass.sig' }]);
+  assert.deepEqual(s.src.view, FREE_VIEW);
+  assert.equal(s.src.levels?.kind, 'liq');
+  assert.ok(s.src.setOf(view({ liq: false, stops: true })).standing());
+  assert.ok(s.src.setOf(view({ liq: false, takes: true })).standing());
+});
+
 test('the live Plus files are asked for with the pass after the free file, only while the view needs them, and nothing paid without a pass', async () => {
   const pass = { value: null as string | null };
   const s = service({ [U.groups]: { status: 200, body: groups([[7, 0, 50, 0, 0, 1, 0, 50, 0]], [[9, 0, 60, 0, 0, 1, 0, 60, 0]]) }, [U.triggers]: { status: 200, body: triggers(STOPS, TAKES) } }, pass);

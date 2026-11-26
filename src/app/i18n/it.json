@@ -3644,5 +3644,11 @@
  "RSI with divergences": "RSI con divergenze",
  "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "RSI di Wilder con divergenze rialziste e ribassiste nella riga dell’RSI e nel grafico dei prezzi.",
  "The script finds swings in RSI and takes the price high or low from the same candles. It compares swings 5 to 60 candles apart. A higher price high with a lower RSI high marks bearish divergence. A lower price low with a higher RSI low marks bullish divergence.": "Lo script trova gli estremi nell’RSI e usa il massimo o il minimo delle stesse candele. Confronta estremi distanti da 5 a 60 candele. Un massimo di prezzo più alto con un massimo dell’RSI più basso indica una divergenza ribassista. Un minimo di prezzo più basso con un minimo dell’RSI più alto indica una divergenza rialzista.",
- "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "Per impostazione predefinita, l’RSI usa 14 candele e ogni estremo usa 5 candele su ciascun lato. I segni appaiono alla chiusura dell’ultima candela a destra. Entrambe le impostazioni sono regolabili. I segni nel grafico si possono nascondere nelle impostazioni dello script."
+ "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "Per impostazione predefinita, l’RSI usa 14 candele e ogni estremo usa 5 candele su ciascun lato. I segni appaiono alla chiusura dell’ultima candela a destra. Entrambe le impostazioni sono regolabili. I segni nel grafico si possono nascondere nelle impostazioni dello script.",
+ "Price simulation": "Simulazione del prezzo",
+ "Target price": "Prezzo obiettivo",
+ "Liq USD": "Liq. USD",
+ "Reset": "Ripristina",
+ "Liquidations here divided by liquidations the same distance away on the other side.": "Liquidazioni verso il target divise per quelle alla stessa distanza nella direzione opposta.",
+ "Price simulation needs a live BTC market quoted in dollars.": "La simulazione richiede un mercato BTC in tempo reale quotato in dollari."
 }

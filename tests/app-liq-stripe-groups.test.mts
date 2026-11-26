@@ -255,7 +255,7 @@ test('the map draws the stripe through its painter and takes only what it painte
   const heat = fs.readFileSync('src/app/panes/heat-pane.ts', 'utf8'), stripe = fs.readFileSync('src/app/liq-stripe.ts', 'utf8');
   assert.match(heat, /plan = stripePlan\(pair, stripeSplitRoom\(state\)\);\n    let note = stripeNote\(src, view, pair, plan\);/);
   assert.match(heat, /export const stripeSplitRoom = \(state: AppState\): boolean => liqSplitDrawn\(state\) \|\| \(!COMPACT && !state\.liqLevels\.column\);/);
-  assert.match(heat, /this\.#liqLanes = null; this\.#liqRightLane = null; this\.#liqNoteBox = null;\n    const ask = liveAsk/, 'neither lane answers the pointer before this frame draws it (another coin, a replay)');
+  assert.match(heat, /#paintLiquidationLevels\(ctx: CanvasRenderingContext2D,[^\n]+\n[^\n]+\n[^\n]+\n    this\.#liqLanes = null; this\.#liqRightLane = null; this\.#liqNoteBox = null;/, 'neither lane answers the pointer before this frame draws it (another coin, a replay)');
   assert.match(heat, /const painted = paintStripe\(ctx, \{ src, plan, pair, x0: this\.#liqStripeLeft\(pw\), pw, ph, view: v, colors: p, held: this\.#liqHeld \}\);/);
   assert.match(heat, /this\.#liqLanes = painted\.lanes; this\.#liqRightLane = painted\.right;\n        if \(painted\.captions\) this\.#placeLiqCaptions\(ctx, painted\.captions, pw\);/);
   // The take profits' caption and a lane that is only out of date come from the painter (liq-stripe.ts), and the corner tools end left of the lanes.

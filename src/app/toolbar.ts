@@ -283,6 +283,9 @@ export class Toolbar {
     el('i', { class: 'select-glyph', ariaHidden: 'true' }), t('Select'));
   /** The map's top-right corner: Select and Recenter, side by side. */
   #mapTools = el('div', { class: 'map-tools' });
+  onPriceSimulation: (anchor: HTMLElement) => void = () => {};
+  #mapSimulation = el('button', { type: 'button', class: 'map-simulation', ariaLabel: t('Price simulation'), tip: t('If price gets here'),
+    onclick: () => this.onPriceSimulation(this.#mapSimulation) }, el('i', { ariaHidden: 'true', textContent: '±' }), t('Price simulation'));
   /** Go to a date and time (the map's corner, beside Select; G). */
   #goto = el('button', { type: 'button', class: 'map-goto', textContent: t('Go to'), tip: t('Go to a date and time (keyboard: G)'), onclick: () => this.openGoTo() });
   /** What Go to moves and reads (set by main). */
@@ -854,7 +857,8 @@ export class Toolbar {
       // The colour scale with the Heatmap key at its end (the scale may come back from a phone's Settings row).
       this.#heatSplit.replaceChildren(this.#heatScale, this.#heatKey);
       const inCorner = this.#mapHost !== null;
-      if (inCorner) { this.#mapTools.replaceChildren(this.#layoutCorner, this.#goto, this.#rangeCorner, ...(this.#drawCorner ? [this.#drawCorner] : []), this.#recenter, this.#mapMax); this.#mapHost!.prepend(this.#mapTools); }
+      if (inCorner) { this.#mapTools.replaceChildren(this.#layoutCorner, this.#goto, this.#rangeCorner, ...(this.#drawCorner ? [this.#drawCorner] : []),
+        ...(currentCoin().coin === 'BTC' && liqLevelsUrl() ? [this.#mapSimulation] : []), this.#recenter, this.#mapMax); this.#mapHost!.prepend(this.#mapTools); }
       const host = this.#statusHost;
       // With a status bar the connection state and the language and theme buttons live there.
       host?.replaceChildren(this.#keys, this.#tab, this.#zone, this.#language, this.#theme);
@@ -1014,10 +1018,12 @@ export class Toolbar {
     this.#venuesLabel.textContent = t('Choose…'); this.#venuesCount.hidden = true;
     // Back up and restore: a tool of its own on a phone, which has no Layouts panel; beside Layouts on a tablet.
     const backup = button(t('Back up and restore'), () => { this.#sheet?.close(); this.#openBackup(this.#more); }, t('Everything the page keeps in this browser, to one file and back'));
+    const simulation = currentCoin().coin === 'BTC' && liqLevelsUrl()
+      ? button(t('Price simulation'), () => { this.#sheet?.close(); this.onPriceSimulation(this.#more); }, t('If price gets here')) : null;
     this.#sheet = openSheet(t('Settings'), body => {
       this.#heatctl.replaceChildren();
       body.append(
-        section(t('Tools'), [el('div', { class: 'sheet-tiles' }, ...(PLUS_FREE ? [] : [this.#plus]), this.#tour, this.#range, this.#guide, this.#shot, this.#author, this.#install.root, ...(isPhone() ? [backup] : []))]),
+        section(t('Tools'), [el('div', { class: 'sheet-tiles' }, ...(PLUS_FREE ? [] : [this.#plus]), this.#tour, this.#range, ...(simulation ? [simulation] : []), this.#guide, this.#shot, this.#author, this.#install.root, ...(isPhone() ? [backup] : []))]),
         section(t('Panels'), [this.#toggles, el('p', { class: 'sheet-note', textContent: t('Depth, OI, Delta, L/S and Stats each add a tab to the bar under the map.') })]),
         // A phone arranges its panes by tab; a touch tablet that keeps the desktop's arrangement has the layouts here, its map's corner being clear of buttons.
         ...(isPhone() ? [] : [section(t('Layouts'), [el('div', { class: 'sheet-tiles' }, button(t('Layouts'), () => { this.#sheet?.close(); this.#openLayouts(this.#more); }, t('Layouts: choose a ready-made arrangement of the panels, or save your own')), backup)])]),

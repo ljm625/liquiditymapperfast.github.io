@@ -3398,5 +3398,11 @@
  "RSI with divergences": "RSI 背离",
  "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "Wilder RSI，在 RSI 副图和价格主图上标出看涨和看跌背离。",
  "The script finds swings in RSI and takes the price high or low from the same candles. It compares swings 5 to 60 candles apart. A higher price high with a lower RSI high marks bearish divergence. A lower price low with a higher RSI low marks bullish divergence.": "脚本先找 RSI 的波段高低点，再取同一根 K 线的价格最高价或最低价。只比较相隔 5 到 60 根 K 线的波段。价格高点抬高、RSI 高点降低时标记顶背离。价格低点降低、RSI 低点抬高时标记底背离。",
- "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "RSI 默认用 14 根 K 线，波段左右各看 5 根。右侧最后一根 K 线收盘后才显示标记。这两项都可调整，也可在脚本设置中隐藏主图标记。"
+ "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "RSI 默认用 14 根 K 线，波段左右各看 5 根。右侧最后一根 K 线收盘后才显示标记。这两项都可调整，也可在脚本设置中隐藏主图标记。",
+ "Price simulation": "价格模拟",
+ "Target price": "目标价",
+ "Liq USD": "清算金额",
+ "Reset": "重置",
+ "Liquidations here divided by liquidations the same distance away on the other side.": "目标方向的清算额除以反方向相同距离的清算额。",
+ "Price simulation needs a live BTC market quoted in dollars.": "价格模拟需要实时的美元计价 BTC 市场。"
 }

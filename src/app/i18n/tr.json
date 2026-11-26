@@ -3576,5 +3576,11 @@
  "RSI with divergences": "Uyumsuzluklu RSI",
  "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "RSI satırında ve fiyat grafiğinde yükseliş ve düşüş uyumsuzluklarını gösteren Wilder RSI.",
  "The script finds swings in RSI and takes the price high or low from the same candles. It compares swings 5 to 60 candles apart. A higher price high with a lower RSI high marks bearish divergence. A lower price low with a higher RSI low marks bullish divergence.": "Betik RSI dönüşlerini bulur ve aynı mumların fiyat tepe veya dip değerini kullanır. Aralarında 5 ile 60 mum bulunan dönüşleri karşılaştırır. Daha yüksek fiyat tepesi ile daha düşük RSI tepesi düşüş uyumsuzluğunu gösterir. Daha düşük fiyat dibi ile daha yüksek RSI dibi yükseliş uyumsuzluğunu gösterir.",
- "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "Varsayılan olarak RSI 14 mum kullanır ve dönüşün iki yanında 5 mum aranır. İşaretler sağdaki son mum kapanınca görünür. Her iki ayar değiştirilebilir. Grafikteki işaretler betik ayarlarından gizlenebilir."
+ "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "Varsayılan olarak RSI 14 mum kullanır ve dönüşün iki yanında 5 mum aranır. İşaretler sağdaki son mum kapanınca görünür. Her iki ayar değiştirilebilir. Grafikteki işaretler betik ayarlarından gizlenebilir.",
+ "Price simulation": "Fiyat simülasyonu",
+ "Target price": "Hedef fiyat",
+ "Liq USD": "Tasfiye USD",
+ "Reset": "Sıfırla",
+ "Liquidations here divided by liquidations the same distance away on the other side.": "Hedefe kadar olan tasfiyelerin, ters yönde aynı mesafedeki tasfiyelere oranı.",
+ "Price simulation needs a live BTC market quoted in dollars.": "Fiyat simülasyonu için dolar cinsinden fiyatlanan canlı bir BTC piyasası gerekir."
 }

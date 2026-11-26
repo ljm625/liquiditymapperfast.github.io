@@ -3582,5 +3582,11 @@
  "RSI with divergences": "RSI mit Divergenzen",
  "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "Wilder-RSI mit bullischen und bärischen Divergenzen in der RSI-Zeile und im Kurschart.",
  "The script finds swings in RSI and takes the price high or low from the same candles. It compares swings 5 to 60 candles apart. A higher price high with a lower RSI high marks bearish divergence. A lower price low with a higher RSI low marks bullish divergence.": "Das Skript findet Hochs und Tiefs im RSI und liest den Höchst- oder Tiefstkurs derselben Kerzen. Es vergleicht Wendepunkte im Abstand von 5 bis 60 Kerzen. Ein höheres Kurshoch mit einem niedrigeren RSI-Hoch zeigt eine bärische Divergenz. Ein tieferes Kurstief mit einem höheren RSI-Tief zeigt eine bullische Divergenz.",
- "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "Standardmäßig nutzt der RSI 14 Kerzen und jeder Wendepunkt 5 Kerzen auf beiden Seiten. Die Markierung erscheint beim Schluss der letzten Kerze rechts. Beides lässt sich einstellen. Die Markierungen im Chart können in den Skripteinstellungen ausgeblendet werden."
+ "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "Standardmäßig nutzt der RSI 14 Kerzen und jeder Wendepunkt 5 Kerzen auf beiden Seiten. Die Markierung erscheint beim Schluss der letzten Kerze rechts. Beides lässt sich einstellen. Die Markierungen im Chart können in den Skripteinstellungen ausgeblendet werden.",
+ "Price simulation": "Kurssimulation",
+ "Target price": "Zielkurs",
+ "Liq USD": "Liq. USD",
+ "Reset": "Zurücksetzen",
+ "Liquidations here divided by liquidations the same distance away on the other side.": "Liquidationen bis zum Ziel geteilt durch Liquidationen in gleicher Entfernung in der Gegenrichtung.",
+ "Price simulation needs a live BTC market quoted in dollars.": "Die Kurssimulation braucht einen laufenden BTC-Markt mit Dollar-Notierung."
 }

@@ -3701,5 +3701,11 @@
  "RSI with divergences": "RSI з дивергенціями",
  "Wilder RSI with bullish and bearish divergences on the RSI row and the price chart.": "RSI Вайлдера з бичачими й ведмежими дивергенціями на панелі RSI та на графіку ціни.",
  "The script finds swings in RSI and takes the price high or low from the same candles. It compares swings 5 to 60 candles apart. A higher price high with a lower RSI high marks bearish divergence. A lower price low with a higher RSI low marks bullish divergence.": "Скрипт знаходить екстремуми RSI й бере максимум або мінімум ціни тих самих свічок. Він порівнює екстремуми на відстані від 5 до 60 свічок. Вищий максимум ціни за нижчого максимуму RSI вказує на ведмежу дивергенцію. Нижчий мінімум ціни за вищого мінімуму RSI вказує на бичачу дивергенцію.",
- "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "Типово RSI використовує 14 свічок, а кожен екстремум — 5 свічок з обох боків. Позначки з’являються після закриття останньої свічки праворуч. Обидва параметри можна змінити. Позначки на графіку можна приховати в налаштуваннях скрипта."
+ "By default RSI uses 14 candles and each swing uses 5 candles on either side. Marks appear when the last candle on the right closes. Both settings are adjustable. The map markings can be hidden in the script settings.": "Типово RSI використовує 14 свічок, а кожен екстремум — 5 свічок з обох боків. Позначки з’являються після закриття останньої свічки праворуч. Обидва параметри можна змінити. Позначки на графіку можна приховати в налаштуваннях скрипта.",
+ "Price simulation": "Симуляція ціни",
+ "Target price": "Цільова ціна",
+ "Liq USD": "Лікв. USD",
+ "Reset": "Скинути",
+ "Liquidations here divided by liquidations the same distance away on the other side.": "Ліквідації до цілі, поділені на ліквідації на тій самій відстані в протилежному напрямку.",
+ "Price simulation needs a live BTC market quoted in dollars.": "Для симуляції потрібен поточний ринок BTC із ціною в доларах."
 }

@@ -195,6 +195,7 @@ async function main(): Promise<void> {
   heat.scriptLegend = (t, valued) => script.mapLegend(t, valued); heat.onScriptLegend = places => script.placeLegendTools(places); heat.root.append(script.legendTools);
   // The Scripts lamp and key in the top bar: the key opens the panel (from the pane's own button too), the lamp says what the scripts do.
   toolbar.onOpenScripts = anchor => script.openPanel(anchor); script.onStatus = (note, name) => toolbar.setScriptsStatus(note, name);
+  toolbar.onPriceSimulation = anchor => { if (isPhone()) dock.show('map'); heat.openPriceSimulation(anchor); };
   script.panelAnchor = () => toolbar.scriptsAnchor;
   // Tools an agent in the browser may call (agent/): read the chart and the scripts, try one, show one as a draft. Only a browser with page
   // tools loads them; nothing they do saves a script.
