@@ -31,9 +31,9 @@ export const LIQ_SPLITS: readonly LiqSplit[] = ['none', 'kinds', 'groups'];
 
 /**
  * The Chart deck's Liquidation levels: whether they are drawn on the map, whether their own column stands beside the profile column, and what
- * they show (`liq`, `stops`, `takes`: at least one on; `group`; `split`).
+ * they show (`liq`, `stops`, `takes`: at least one on; `group`; `split`). `fixed` uses fixed price references on the map stripe.
  */
-export interface LiqLevelSettings { on: boolean; column: boolean; liq: boolean; stops: boolean; takes: boolean; group: LiqGroup; split: LiqSplit }
+export interface LiqLevelSettings { on: boolean; column: boolean; liq: boolean; stops: boolean; takes: boolean; group: LiqGroup; split: LiqSplit; fixed?: boolean }
 
 /**
  * Whether a split can stand with these kinds: liquidations beside stops needs both on, everyone beside the profitable traders needs
@@ -57,7 +57,7 @@ export function splitFor(split: LiqSplit, kinds: { liq: boolean; stops: boolean 
  */
 export function readLiqLevels(saved: unknown): LiqLevelSettings {
   const s = saved && typeof saved === 'object' ? saved as Record<string, unknown> : {};
-  const shown = { on: typeof s.on === 'boolean' ? s.on : true, column: typeof s.column === 'boolean' ? s.column : true };
+  const shown = { on: typeof s.on === 'boolean' ? s.on : true, column: typeof s.column === 'boolean' ? s.column : true, ...(s.fixed === true ? { fixed: true } : {}) };
   const group: LiqGroup = (LIQ_GROUPS as readonly unknown[]).includes(s.group) ? s.group as LiqGroup : 'all';
   const asked: LiqSplit = (LIQ_SPLITS as readonly unknown[]).includes(s.split) ? s.split as LiqSplit : 'none';
   const free: LiqLevelSettings = { ...shown, liq: true, stops: false, takes: false, group: 'all', split: 'none' };

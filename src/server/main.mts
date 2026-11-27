@@ -14,6 +14,7 @@ import { createMockReferencePrice } from '../core/mock-provider-provenance.mts';
 import { DEFAULT_BINANCE_OI_POLL_MS, DEFAULT_REFRESH_MS } from '../core/constants.mts';
 import { normalizeHistoryPath, startupFailureRecord } from './startup-diagnostics.mts';
 import { installV2, type V2Handle } from './v2/api.mts';
+import { CohortPositioning } from './v2/cohorts.mts';
 import { restoreFeedSelection, saveFeedSelection } from './feed-selection-store.mts';
 import { ORDERBOOK_VENUE_MAX_SELECTED, orderbookVenueStatus } from '../core/orderbook-venue-controls.mts';
 import { FeedConfigurationRetired } from './live-feed-transport.mts';
@@ -153,7 +154,9 @@ try {
   const address = await runningApp.start();
   if (address === null || typeof address !== 'object' || typeof address.address !== 'string' || !Number.isInteger(address.port)) throw new Error('Local server did not return a valid TCP address');
   const memoryOnly = String(effectiveHistoryPath).trim() === ':memory:';
-  v2 = installV2(runningApp, { dataDir: memoryOnly ? '' : path.dirname(path.resolve(String(effectiveHistoryPath))), persist: !memoryOnly, oiSampling: live });
+  const hyperdashKey = process.env.HYPERDASH_API_KEY?.trim();
+  v2 = installV2(runningApp, { dataDir: memoryOnly ? '' : path.dirname(path.resolve(String(effectiveHistoryPath))), persist: !memoryOnly, oiSampling: live,
+    cohorts: hyperdashKey ? new CohortPositioning(hyperdashKey) : undefined });
   startupStage = 'feed-start';
   failAtRequestedTestStage('feed-start');
   if (feeds) await feeds.start(liveFeedCoreConfig);

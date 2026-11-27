@@ -37,6 +37,7 @@ import { ABSORPTION_LIMITS, type AbsorptionSettings } from './absorption.ts';
 import { BUBBLE_LIMITS, BUBBLE_MINIMUMS, type BubbleSettings } from './prints.ts';
 import { LIQUIDATION_LIMITS, LIQUIDATION_MINIMUMS, coverageLines, type LiquidationSettings } from './liquidations.ts';
 import { buildKeyLevelPanel } from './keylevels/panel.ts';
+import { buildExhaustionPanel, exhaustionTitle } from './exhaustion/panel.ts';
 import { buildLiqLevelPanel, releaseLiqLevelPanel } from './liq-panel.ts';
 import type { LiqLevelsSource } from './liq-levels.ts';
 import { liqLevelsUrl } from './liq-url.ts';
@@ -198,22 +199,23 @@ export class Toolbar {
    */
   #trades = el('button', { class: 'led-btn', textContent: t('Trades'), tip: HELP.bubbles.tip });
   /** The settings keys of the Chart deck's split buttons (`splitButton`): each opens its feature's panel, which is placed from the key. */
-  #settingsKeys: Record<Exclude<Feature, 'highlights'>, HTMLButtonElement> = {
+  #settingsKeys: Record<Exclude<Feature, 'highlights'> | 'exhaustion', HTMLButtonElement> = {
     trades: settingsKey(t('Trades')), footprint: settingsKey(t('Footprint')), vwap: settingsKey(t('VWAP')), keyLevels: settingsKey(t('Key levels')),
     liquidations: settingsKey(t('Liquidations')), liqLevels: settingsKey(t('Liquidation levels')), traded: settingsKey(t('Volume profile')), absorption: settingsKey(t('Absorption')),
-    tpo: settingsKey(t('TPO')),
+    tpo: settingsKey(t('TPO')), exhaustion: settingsKey(exhaustionTitle()),
   };
   /** The Alerts deck's settings keys: Highlights, Sound and Waves are switched and set the same way. */
   #alertKeys = { highlights: settingsKey(t('Highlights')), sound: settingsKey(t('Sounds')), waves: settingsKey(t('Waves')) };
   #alertSplits: { highlights: HTMLElement; sound: HTMLElement; waves: HTMLElement } | null = null;
   /** The split buttons themselves (the button and its key), built once the buttons and keys exist. */
-  #splits: Record<Exclude<Feature, 'highlights'>, HTMLElement> | null = null;
+  #splits: Record<Exclude<Feature, 'highlights'> | 'exhaustion', HTMLElement> | null = null;
   #absorption = el('button', { class: 'led-btn', textContent: t('Absorption'), tip: HELP.absorption.tip });
   /** Liquidations on the map (liquidations.ts), set in its panel. */
   #liquidations = el('button', { class: 'led-btn', textContent: t('Liquidations'), tip: HELP.liquidations.tip });
   #liquidationPanel: Panel | null = null;
   /** The previous day's, week's and month's levels (keylevels/), set in its panel. */
   #keyLevels = el('button', { class: 'led-btn', textContent: t('Key levels'), tip: HELP.keyLevels.tip });
+  #exhaustion = el('button', { class: 'led-btn leledc-btn', textContent: t('Leledc'), tip: exhaustionTitle() });
   #keyLevelPanel: Panel | null = null;
   /** Hyperliquid's liquidation levels over the map and in the profile column (liq-levels.ts), set in its panel; only where its file has an address. */
   #liqLevels = el('button', { class: 'led-btn liq-levels-btn', textContent: t('Liq levels'), tip: HELP.liqLevels.tip });
@@ -286,6 +288,9 @@ export class Toolbar {
   onPriceSimulation: (anchor: HTMLElement) => void = () => {};
   #mapSimulation = el('button', { type: 'button', class: 'map-simulation', ariaLabel: t('Price simulation'), tip: t('If price gets here'),
     onclick: () => this.onPriceSimulation(this.#mapSimulation) }, el('i', { ariaHidden: 'true', textContent: '±' }), t('Price simulation'));
+  onCohorts: (anchor: HTMLElement) => void = () => {};
+  #mapCohorts = el('button', { type: 'button', class: 'map-cohorts', ariaLabel: t('Trader cohorts'), tip: t('Trader cohorts'),
+    onclick: () => this.onCohorts(this.#mapCohorts) }, el('i', { ariaHidden: 'true', textContent: '≡' }), t('Cohorts'));
   /** Go to a date and time (the map's corner, beside Select; G). */
   #goto = el('button', { type: 'button', class: 'map-goto', textContent: t('Go to'), tip: t('Go to a date and time (keyboard: G)'), onclick: () => this.openGoTo() });
   /** What Go to moves and reads (set by main). */
@@ -516,6 +521,15 @@ export class Toolbar {
       this.#keyLevelPanel = this.#track(togglePanel(this.#settingsKeys.keyLevels, { title: t('Key levels'), width: 420, align: 'left', onClose: () => { this.#keyLevelPanel = null; } }, build), build);
     };
     this.#keyLevels.onclick = () => this.store.set(togglePatch(this.store.state, 'keyLevels'));
+    this.#settingsKeys.exhaustion.onclick = () => {
+      const build = (_tools: HTMLElement, body: HTMLElement): void => buildExhaustionPanel(this.store, body);
+      this.#track(togglePanel(this.#settingsKeys.exhaustion, { title: exhaustionTitle(), width: 400, align: 'left' }, build), build);
+    };
+    this.#exhaustion.onclick = () => {
+      const s = this.store.state.exhaustion;
+      this.store.set({ exhaustion: { ...s, on: !s.on } });
+      this.refreshOpenPanel();
+    };
     this.#settingsKeys.liquidations.onclick = () => {
       const build = (tools: HTMLElement, body: HTMLElement): void => this.#buildLiquidations(tools, body, () => this.#liquidationPanel?.render(build));
       this.#liquidationPanel = this.#track(togglePanel(this.#settingsKeys.liquidations, { title: t('Liquidations'), width: 400, align: 'left', onClose: () => { this.#liquidationPanel = null; } }, build), build);
@@ -529,6 +543,7 @@ export class Toolbar {
     this.#alertSplits = { highlights: splitButton(this.#highlights, this.#alertKeys.highlights), sound: splitButton(this.#soundButton, this.#alertKeys.sound), waves: splitButton(this.#glass, this.#alertKeys.waves) };
     const k = this.#settingsKeys;
     this.#splits = {
+      exhaustion: splitButton(this.#exhaustion, k.exhaustion),
       trades: splitButton(this.#trades, k.trades), footprint: splitButton(this.#footprint, k.footprint), vwap: splitButton(this.#vwap, k.vwap),
       keyLevels: splitButton(this.#keyLevels, k.keyLevels), liquidations: splitButton(this.#liquidations, k.liquidations), liqLevels: splitButton(this.#liqLevels, k.liqLevels),
       traded: splitButton(this.#traded, k.traded), absorption: splitButton(this.#absorption, k.absorption), tpo: splitButton(this.#tpo, k.tpo),
@@ -858,7 +873,8 @@ export class Toolbar {
       this.#heatSplit.replaceChildren(this.#heatScale, this.#heatKey);
       const inCorner = this.#mapHost !== null;
       if (inCorner) { this.#mapTools.replaceChildren(this.#layoutCorner, this.#goto, this.#rangeCorner, ...(this.#drawCorner ? [this.#drawCorner] : []),
-        ...(currentCoin().coin === 'BTC' && liqLevelsUrl() ? [this.#mapSimulation] : []), this.#recenter, this.#mapMax); this.#mapHost!.prepend(this.#mapTools); }
+        ...(currentCoin().coin === 'BTC' && liqLevelsUrl() ? [this.#mapSimulation] : []), ...(currentCoin().coin === 'BTC' ? [this.#mapCohorts] : []),
+        this.#recenter, this.#mapMax); this.#mapHost!.prepend(this.#mapTools); }
       const host = this.#statusHost;
       // With a status bar the connection state and the language and theme buttons live there.
       host?.replaceChildren(this.#keys, this.#tab, this.#zone, this.#language, this.#theme);
@@ -880,7 +896,7 @@ export class Toolbar {
         deck('heat', t('Heatmap'), [this.#source, ...(LAYER_CHOICE ? [this.#layer] : []), this.#heat.style], [this.#heatSplit]),
         deck('panels', t('Panels'), [this.#toggles]),
         // The Range tool is the map corner's Select when the map holds its tools (Karl, 2026-10-27: the deck's Range was the same button twice).
-        deck('chart', t('Chart'), [sp.footprint, sp.trades, sp.liquidations, ...(liqLevelsUrl() ? [sp.liqLevels] : []), sp.absorption], [sp.traded, sp.tpo, sp.keyLevels, sp.vwap, this.#scriptsSplit, ...(inCorner ? [] : [this.#range])]),
+        deck('chart', t('Chart'), [sp.footprint, sp.trades, sp.liquidations, ...(liqLevelsUrl() ? [sp.liqLevels] : []), sp.absorption], [sp.traded, sp.tpo, sp.keyLevels, sp.vwap, sp.exhaustion, this.#scriptsSplit, ...(inCorner ? [] : [this.#range])]),
         // Waves beside Sounds (Karl, 2026-10-30, from the status bar's corner): with Highlights, the three ways the page says that something large
         // happened, marked, heard and seen across the screen.
         deck('alerts', t('Alerts'), [this.#alertSplits!.highlights], [this.#alertSplits!.sound, this.#alertSplits!.waves]),
@@ -1020,14 +1036,16 @@ export class Toolbar {
     const backup = button(t('Back up and restore'), () => { this.#sheet?.close(); this.#openBackup(this.#more); }, t('Everything the page keeps in this browser, to one file and back'));
     const simulation = currentCoin().coin === 'BTC' && liqLevelsUrl()
       ? button(t('Price simulation'), () => { this.#sheet?.close(); this.onPriceSimulation(this.#more); }, t('If price gets here')) : null;
+    const cohorts = currentCoin().coin === 'BTC' ? button(t('Trader cohorts'), () => { this.#sheet?.close(); this.onCohorts(this.#more); }) : null;
     this.#sheet = openSheet(t('Settings'), body => {
       this.#heatctl.replaceChildren();
       body.append(
-        section(t('Tools'), [el('div', { class: 'sheet-tiles' }, ...(PLUS_FREE ? [] : [this.#plus]), this.#tour, this.#range, ...(simulation ? [simulation] : []), this.#guide, this.#shot, this.#author, this.#install.root, ...(isPhone() ? [backup] : []))]),
+        section(t('Tools'), [el('div', { class: 'sheet-tiles' }, ...(PLUS_FREE ? [] : [this.#plus]), this.#tour, this.#range, ...(simulation ? [simulation] : []), ...(cohorts ? [cohorts] : []),
+          this.#guide, this.#shot, this.#author, this.#install.root, ...(isPhone() ? [backup] : []))]),
         section(t('Panels'), [this.#toggles, el('p', { class: 'sheet-note', textContent: t('Depth, OI, Delta, L/S and Stats each add a tab to the bar under the map.') })]),
         // A phone arranges its panes by tab; a touch tablet that keeps the desktop's arrangement has the layouts here, its map's corner being clear of buttons.
         ...(isPhone() ? [] : [section(t('Layouts'), [el('div', { class: 'sheet-tiles' }, button(t('Layouts'), () => { this.#sheet?.close(); this.#openLayouts(this.#more); }, t('Layouts: choose a ready-made arrangement of the panels, or save your own')), backup)])]),
-        section(t('Chart'), [el('div', { class: 'sheet-tiles' }, ...(['footprint', 'trades', 'liquidations', ...(liqLevelsUrl() ? ['liqLevels'] as const : []), 'absorption', 'traded', 'tpo', 'keyLevels', 'vwap'] as const).map(f => this.#splits![f]), this.#scriptsSplit)]),
+        section(t('Chart'), [el('div', { class: 'sheet-tiles' }, ...(['footprint', 'trades', 'liquidations', ...(liqLevelsUrl() ? ['liqLevels'] as const : []), 'absorption', 'traded', 'tpo', 'keyLevels', 'vwap', 'exhaustion'] as const).map(f => this.#splits![f]), this.#scriptsSplit)]),
         // Only a phone has the Tape tab; a touch tablet keeps the desktop's panes and gets this sheet without it.
         ...(this.tapeFields && isPhone() ? [section(t('Tape'), this.tapeFields().map(([label, control]) => field(label, control)), helpButton('candlePane'))] : []),
         section(t('Heatmap'), [
@@ -1078,6 +1096,7 @@ export class Toolbar {
         : t('The price is hidden, so the heatmap and the trade bubbles show with nothing on top. Click to draw it again as candles, outline candles, OHLC bars or a line.'));
     }
     setValue(this.#layer, state.layer);
+    lamp(this.#exhaustion, state.exhaustion.on);
     this.#toggleButtons.forEach((b, i) => b.classList.toggle('on', state.show[PANE_TOGGLES[i]![0]]));
     lamp(this.#heat.auto, state.heat.auto); lamp(this.#trades, state.show.bubbles); lamp(this.#liquidations, state.liquidations.on); lamp(this.#liqLevels, state.liqLevels.on); lamp(this.#absorption, state.absorption.on); lamp(this.#highlights, state.highlight.on); lamp(this.#traded, state.show.traded); lamp(this.#keyLevels, state.keyLevels.on); lamp(this.#vwap, state.vwap.on); lamp(this.#tpo, state.tpo.on); lamp(this.#scripts, state.show.script); lamp(this.#footprint, state.show.footprint); lamp(this.#range, state.rangeTool || state.range !== null); lamp(this.#rangeCorner, state.rangeTool || state.range !== null);
     if (this.#awake.checked !== state.keepAwake) this.#awake.checked = state.keepAwake;

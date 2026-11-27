@@ -12,14 +12,16 @@ import { HistoryStore } from '../src/server/history.mts';
 import { QuotaLedger } from '../src/core/quota.mts';
 import { decodeLevels } from '../src/app/wire.ts';
 import { gridStepFor } from '../src/shared/grid.ts';
+import { COHORT_HOUR, COHORT_ROUTE, readCohortData } from '../src/shared/cohorts.ts';
+import { CohortPositioning } from '../src/server/v2/cohorts.mts';
 
 const MIN = 60_000;
 type App = ReturnType<typeof createLocalServer>;
 
 /** A local server with the v2 data plane on an ephemeral port, torn down after `run`. */
-async function withServer(run: (ctx: { app: App; v2: V2Handle; base: string; port: number }) => Promise<void>, options: { liveMs?: number } = {}): Promise<void> {
+async function withServer(run: (ctx: { app: App; v2: V2Handle; base: string; port: number }) => Promise<void>, options: { liveMs?: number; cohorts?: CohortPositioning } = {}): Promise<void> {
   const app = createLocalServer({ history: new HistoryStore({ filePath: ':memory:' }), quota: new QuotaLedger({ filePath: ':memory:' }), persistFixture: false });
-  const v2 = installV2(app, { dataDir: '', persist: false, liveMs: options.liveMs ?? 20, heartbeatMs: 500 });
+  const v2 = installV2(app, { dataDir: '', persist: false, liveMs: options.liveMs ?? 20, heartbeatMs: 500, cohorts: options.cohorts });
   await new Promise<void>(resolve => app.server.listen(0, '127.0.0.1', resolve));
   const port = (app.server.address() as AddressInfo).port;
   try { await run({ app, v2, base: `http://127.0.0.1:${port}`, port }); } finally {
@@ -27,6 +29,29 @@ async function withServer(run: (ctx: { app: App; v2: V2Handle; base: string; por
   }
 }
 const get = async (base: string, route: string): Promise<{ status: number; body: any }> => { const response = await fetch(`${base}${route}`); return { status: response.status, body: await response.json().catch(() => null) }; };
+
+test('the BTC cohort route stays unavailable without a provider and never spends quota on a foreign subresource GET', async () => {
+  await withServer(async ({ base }) => assert.equal((await get(base, COHORT_ROUTE)).status, 404));
+  const hour = Date.UTC(2026, 10, 27, 5);
+  let calls = 0;
+  const provider = new CohortPositioning('fixture', async () => {
+    calls++;
+    const position = { t: hour, coin: 'BTC', long_notional: '150.25', short_notional: '49.75', long_traders: 1, short_traders: null };
+    return Response.json({ has_more: false, data: [{ ...position, cohort_type: 'size', cohort: 'large' }, { ...position, cohort_type: 'pnl', cohort: 'profitable' }] });
+  }, () => hour + 20 * MIN);
+  await withServer(async ({ base }) => {
+    const blocked = await fetch(`${base}${COHORT_ROUTE}`, { headers: { 'sec-fetch-site': 'cross-site' } });
+    assert.equal(blocked.status, 403);
+    await blocked.body?.cancel();
+    assert.equal((await get(base, `${COHORT_ROUTE}?since=12`)).status, 400);
+    assert.equal(calls, 0);
+    const reply = await get(base, COHORT_ROUTE);
+    assert.equal(reply.status, 200);
+    assert.equal(readCohortData(reply.body)?.samples.length, 2);
+    assert.deepEqual((await get(base, `${COHORT_ROUTE}?since=${hour + COHORT_HOUR}`)).body, { v: 1, coin: 'BTC', samples: [] });
+    assert.equal(calls, 1);
+  }, { cohorts: provider });
+});
 
 test('an impossible window or an inherited timeframe name is a 400, never an exception out of the request handler', async () => {
   await withServer(async ({ base }) => {

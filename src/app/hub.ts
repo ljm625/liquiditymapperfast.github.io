@@ -31,6 +31,7 @@ import { MAX_COVERAGE_INSTRUMENTS, MAX_COVERAGE_SPAN_MS } from '../shared/covera
 import { SEAM_SLACK_MS, TNS_HOLE_MS, recordedStretch } from './tns/model.ts';
 import { readCandles, webGet } from '../shared/history.ts';
 import { KeyLevelHistory, type HistoryTarget } from './keylevels/history.ts';
+import { ExhaustionHistory } from './exhaustion/history.ts';
 import { TPO_DAYS_REACH_MS, TPO_MAX_BARS, TPO_REACH_MS } from './tpo/settings.ts';
 import { pacedFetcher } from './paced-get.ts';
 import { scriptChunk } from './script/bars.ts';
@@ -239,7 +240,7 @@ export class Hub {
   /** The wait for the map has ended (`#afterMap` resolved): history no longer waits, whatever the clock says to the last millisecond. */
   #mapWaited = false;
   /** Resolves once history reads no longer wait for the map's first columns (`mapFirst`). */
-  #afterMap(): Promise<void> {
+  afterMap(): Promise<void> {
     return this.#afterMapRead ??= Promise.race([this.columnsArrived, new Promise<void>(resolve => setTimeout(resolve, Math.max(0, MAP_FIRST_MS - (performance.now() - this.#bornAt))))]).then(() => { this.#mapWaited = true; });
   }
   #series = '';
@@ -322,6 +323,7 @@ export class Hub {
   readonly liquidations = new LiquidationBook();
   /** The hourly candles the key levels are read from, straight from the exchange (keylevels/history.ts). */
   readonly keyHistory = new KeyLevelHistory(historyGet);
+  readonly exhaustionHistory = new ExhaustionHistory(historyGet);
   /** The Liquidation levels layer's file and the candles that take its levels away. */
   readonly liqLevels = new LiqLevelsSource(webGet);
   /** The scripts' candles from the exchange (`scriptHistory`), by market, timeframe and count, the last `SCRIPT_HISTORIES` asked for. */
@@ -957,7 +959,7 @@ export class Hub {
     if (this.mapFirst()) {
       this.#oiGen++;   // a load already out (a phone's, before its map was shown) answers for another market or timeframe
       if (!state.oi.length && !state.oiReading) this.store.set({ oiReading: true });
-      return this.#afterMap().then(() => this.loadOi());
+      return this.afterMap().then(() => this.loadOi());
     }
     const added = oiMarketIds(state, this.flow), venues = added ?? [];
     const key = `${own}|${timeframe}|${state.oiMarkets}|${venues.join(',')}`;
@@ -1385,7 +1387,7 @@ export class Hub {
    */
   async recentPrints(ids: readonly string[], lookbackMs: number, until: number, minUsd: number): Promise<{ prints: Print[]; from: number; holes: [number, number][]; minHole: number } | null> {
     if (!this.source.coverage || !ids.length) return null;
-    if (this.mapFirst()) await this.#afterMap();
+    if (this.mapFirst()) await this.afterMap();
     const end = until - this.#sourceSkew, minHole = TNS_HOLE_MS[this.source.kind];
     let start = end - lookbackMs;
     const answer = await this.source.coverage(ids.slice(0, MAX_COVERAGE_INSTRUMENTS), 'trades', start, end);
@@ -1410,7 +1412,7 @@ export class Hub {
    * recording, never an exchange; on the server's page it waits for the map's first columns, as every history read does.
    */
   async printsIn(from: number, to: number, minUsd: number): Promise<{ prints: Print[]; floor: number }> {
-    if (this.mapFirst()) await this.#afterMap();
+    if (this.mapFirst()) await this.afterMap();
     const skew = this.#sourceSkew, rows = await this.source.prints(from - skew, to - skew, minUsd);
     let floor = minUsd;
     if (rows.length >= PRINTS_PER_ANSWER) { floor = Infinity; for (const r of rows) if (r.usd < floor) floor = r.usd; }
@@ -1427,7 +1429,7 @@ export class Hub {
    */
   async recordingHoles(ids: readonly string[], from: number, to: number): Promise<{ since: number; holes: [number, number][]; sinceOf: Record<string, number> } | null> {
     if (!this.source.coverage || !ids.length) return null;
-    if (this.mapFirst()) await this.#afterMap();
+    if (this.mapFirst()) await this.afterMap();
     const skew = this.#sourceSkew, end = to - skew, start = Math.max(from - skew, end - MAX_COVERAGE_SPAN_MS);
     const answer = await this.source.coverage(ids.slice(0, MAX_COVERAGE_INSTRUMENTS), 'trades', start, end);
     const sinceOf: Record<string, number> = {};

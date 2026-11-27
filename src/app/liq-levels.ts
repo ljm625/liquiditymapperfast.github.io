@@ -341,13 +341,14 @@ export function binsPerRow(step: number, view: Pick<View, 'p0' | 'p1'>, ph: numb
 }
 
 /** The rows within [lo, hi), grouping `per` consecutive bins on the fixed grid. */
-export function liqRows(levels: LiqLevels, taken: { long: Taken; short: Taken } | null, per: number, lo: number, hi: number): LiqRow[] {
+export function liqRows(levels: LiqLevels, taken: { long: Taken; short: Taken } | null, per: number, lo: number, hi: number, indices?: readonly number[]): LiqRow[] {
   const rows = new Map<number, LiqRow>(), step = levels.step;
   // Each row's largest single position per side: a position sits in one bin, so the largest of the bins' is the row's.
   const tops = new Map<number, [number, number]>();
   const k0 = Math.floor(lo / step) - per, k1 = Math.ceil(hi / step) + per;
-  let i = lowerBound(levels.k, k0);
-  for (; i < levels.k.length && levels.k[i]! <= k1; i++) {
+  const start = indices ? 0 : lowerBound(levels.k, k0), end = indices?.length ?? lowerBound(levels.k, k1 + 1);
+  for (let index = start; index < end; index++) {
+    const i = indices ? indices[index]! : index;
     const k = levels.k[i]!, g = Math.floor(k / per);
     let r = rows.get(g);
     if (!r) {
@@ -581,19 +582,64 @@ export function captionPlace(lane: Lane, need: number): { x: number; w: number }
 /** The colour strength of what still stands of the rows in view (heatScale over each side's standing dollars). */
 export const standingHeat = (rows: readonly LiqRow[]): ((usd: number) => number) => heatScale(rows.flatMap(r => [r.longLeft, r.shortLeft]));
 
+/** Cap the points in a fixed lane even on a chart zoomed out over the entire snapshot. Rank each side once per snapshot. */
+const FIXED_REFERENCES_PER_SIDE = 24;
+interface FixedReferences { indices: number[]; heat: (usd: number) => number }
+const references = new WeakMap<LiqLevels, FixedReferences>();
+function fixedReferences(levels: LiqLevels): FixedReferences {
+  const held = references.get(levels);
+  if (held) return held;
+  const indices = new Set<number>(), amounts: number[] = [];
+  for (const side of ['long', 'short'] as const) {
+    const isolated = levels[`${side}Iso`], cross = levels[`${side}Cross`];
+    const positive: { index: number; usd: number }[] = [];
+    for (let i = 0; i < levels.k.length; i++) {
+      const usd = isolated[i]! + cross[i]!;
+      if (usd > 0) positive.push({ index: i, usd });
+    }
+    positive.sort((a, b) => b.usd - a.usd || a.index - b.index);
+    for (const { index, usd } of positive.slice(0, FIXED_REFERENCES_PER_SIDE)) { indices.add(index); amounts.push(usd); }
+  }
+  const fixed = { indices: [...indices].sort((a, b) => a - b), heat: heatScale(amounts) };
+  references.set(levels, fixed);
+  return fixed;
+}
+
 /** One lane of the stripe as drawn: its rows in view, their colour scale, and what they were made for (`laneRows`). */
-export interface LaneRows { key: string; rows: LiqRow[]; heat: (usd: number) => number }
+export interface LaneRows { key: string; rows: LiqRow[]; heat: (usd: number) => number; fixed: boolean }
 /**
  * The rows in view of one lane of the stripe (the levels', or the take profits' beside them) with their colour scale, as the map draws them
  * and its box reads them: `held`, the lane's last, is kept while the source's key for that lane and the rows on screen are the same; else
- * they are grouped again.
+ * they are grouped again. A fixed lane uses the snapshot's original bins and colour scale at every zoom. Crossed bins still fade or disappear.
  */
-export function laneRows(src: Pick<LiqLevelsSource, 'key' | 'takesKey' | 'taken' | 'takesTaken'>, lane: 'levels' | 'takes', levels: LiqLevels, view: Pick<View, 'p0' | 'p1'>, ph: number, held: LaneRows | null): LaneRows {
+export function laneRows(src: Pick<LiqLevelsSource, 'key' | 'takesKey' | 'taken' | 'takesTaken'>, lane: 'levels' | 'takes', levels: LiqLevels, view: Pick<View, 'p0' | 'p1'>, ph: number, held: LaneRows | null, fixed = false): LaneRows {
+  if (fixed && (levels.kind === 'liq' || levels.kind === 'both')) {
+    const key = `${src.key()}|fixed`;
+    if (held?.key === key) return held;
+    const { indices, heat } = fixedReferences(levels);
+    const rows = liqRows(levels, src.taken(), 1, 0, Infinity, indices);
+    return { key, rows, heat, fixed: true };
+  }
   const per = binsPerRow(levels.step, view, ph), span = per * levels.step, g0 = Math.floor(view.p0 / span), g1 = Math.ceil(view.p1 / span);
   const key = `${lane === 'takes' ? src.takesKey() : src.key()}|${per}|${g0}|${g1}`;
   if (held?.key === key) return held;
   const rows = liqRows(levels, lane === 'takes' ? src.takesTaken() : src.taken(), per, g0 * span, g1 * span);
-  return { key, rows, heat: standingHeat(rows) };
+  return { key, rows, heat: standingHeat(rows), fixed: false };
+}
+
+/** The price of a fixed line is the centre of its source bin, whose individual liquidation prices are unavailable. */
+const rowCentreY = (row: LiqRow, view: View, ph: number): number => view.yOf((row.p0 + row.p1) / 2, ph);
+
+export function stripeRowAt(drawn: LaneRows, view: View, y: number, ph: number, slop: number, shown: (row: LiqRow) => boolean): LiqRow | null {
+  let hit: LiqRow | null = null, best = Infinity;
+  for (const row of drawn.rows) {
+    const centre = rowCentreY(row, view, ph);
+    const top = drawn.fixed ? centre : view.yOf(row.p1, ph), bottom = drawn.fixed ? centre : view.yOf(row.p0, ph);
+    if (bottom < 0 || top > ph || y < top - slop || y > bottom + slop || !shown(row)) continue;
+    const distance = Math.abs(y - centre);
+    if (distance < best) { hit = row; best = distance; }
+  }
+  return hit;
 }
 
 /**
@@ -602,7 +648,7 @@ export function laneRows(src: Pick<LiqLevelsSource, 'key' | 'takesKey' | 'taken'
  * of a large row one position holds at least half of. A level price has traded through is gone; nothing is drawn over the heatmap's past.
  * Take profits (`dashed`) are dashed strokes instead (`TAKE_DASH`), with no edge and no diamond.
  */
-export function paintLiqStripe(ctx: CanvasRenderingContext2D, view: View, x0: number, pw: number, ph: number, rows: readonly LiqRow[], heat: (usd: number) => number, colors: LiqColors, dashed = false): void {
+export function paintLiqStripe(ctx: CanvasRenderingContext2D, view: View, x0: number, pw: number, ph: number, rows: readonly LiqRow[], heat: (usd: number) => number, colors: LiqColors, dashed = false, fixed = false): void {
   const w = pw - x0;
   if (w < LANE_MIN_W) return;
   ctx.save();
@@ -610,9 +656,9 @@ export function paintLiqStripe(ctx: CanvasRenderingContext2D, view: View, x0: nu
   // than a third so a small one still reads as dashes, not as a faint level.
   if (dashed) { ctx.setLineDash(TAKE_DASH as number[]); ctx.lineDashOffset = takeDashOffset(x0, w); }
   for (const r of rows) {
-    const y0 = view.yOf(r.p1, ph), y1 = view.yOf(r.p0, ph);
+    const y0 = fixed ? rowCentreY(r, view, ph) : view.yOf(r.p1, ph), y1 = fixed ? y0 : view.yOf(r.p0, ph);
     if (y1 < 0 || y0 > ph) continue;
-    const h = Math.max(1, y1 - y0 - (y1 - y0 > 3 ? 0.5 : 0));
+    const h = fixed ? 1.5 : Math.max(1, y1 - y0 - (y1 - y0 > 3 ? 0.5 : 0));
     for (const side of ['long', 'short'] as const) {
       const usd = r[`${side}Left`]; if (usd <= 0) continue;
       const a = heat(usd); if (a <= 0) continue;
@@ -622,7 +668,8 @@ export function paintLiqStripe(ctx: CanvasRenderingContext2D, view: View, x0: nu
         continue;
       }
       ctx.fillStyle = side === 'long' ? colors.long : colors.short;
-      ctx.globalAlpha = a; ctx.fillRect(x0, y0, w, h);
+      ctx.globalAlpha = a; ctx.fillRect(x0, fixed ? y0 - h / 2 : y0, w, h);
+      if (fixed) continue;
       // A strong level gets a crisp edge on the side facing the price, so the clusters read as lines.
       if (a >= 0.45) {
         const edge = side === 'long' ? Math.round(y0) : Math.round(y0 + h) - 1;

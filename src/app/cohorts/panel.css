@@ -1,0 +1,22 @@
+.cohort-status { margin: 0 0 8px; }
+.cohort-scroll { max-width: 100%; overflow-x: auto; }
+.cohort-panel table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cohort-panel :is(th, td) { padding: 4px 7px; text-align: right; }
+.cohort-panel th:first-child { text-align: left; }
+.cohort-panel thead { color: var(--muted); border-bottom: 1px solid var(--line); }
+.cohort-panel .cohort-section { color: var(--muted); border-block: 1px solid var(--line); background: var(--face); }
+.cohort-panel tbody tr:not(.cohort-section) { cursor: pointer; }
+.cohort-panel tbody tr:not(.cohort-section):is(:hover, .on) { background: color-mix(in srgb, var(--ui) 14%, var(--panel)); }
+.cohort-panel tbody button { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%; color: var(--text);
+  padding: 1px 3px; border: 1px solid transparent; border-radius: var(--radius); background: transparent; font: inherit; text-align: left; }
+.cohort-panel tbody button:focus-visible { border-color: var(--ui); }
+.cohort-panel tbody small { color: var(--muted); font-size: .87em; }
+.cohort-panel [data-order="buy"] { color: var(--bid); }
+.cohort-panel [data-order="sell"] { color: var(--ask); }
+.cohort-detail { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.cohort-detail h4 { margin: 0 0 5px; }
+.cohort-spark { display: block; width: 100%; height: 88px; color: var(--ui); border-bottom: 1px solid var(--line); }
+.cohort-axis { display: flex; justify-content: space-between; gap: 6px; }
+.cohort-spark[hidden], .cohort-axis[hidden] { display: none; }
+.cohort-axis, .cohort-facts { color: var(--muted); font-size: 11px; }
+.cohort-facts { margin: 6px 0 0; }

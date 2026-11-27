@@ -45,19 +45,19 @@ export function stripeStands(src: LiqLevelsSource, plan: StripePlan): boolean {
  * of the price); the levels' lane is the one beside the liquidation column, whose curve sums them. A split drawn as two lanes: the left set's
  * lane, then the right set's beside the column, in the column's order. `held` keeps each lane's rows from frame to frame (updated in place).
  */
-export function paintStripe(ctx: CanvasRenderingContext2D, o: { src: LiqLevelsSource; plan: StripePlan; pair: LiqPair | null; x0: number; pw: number; ph: number; view: View; colors: StripeColors; held: StripeHeld }): StripePainted | null {
-  const { src, plan, pair, x0, pw, ph, view: v, colors: p, held } = o;
+export function paintStripe(ctx: CanvasRenderingContext2D, o: { src: LiqLevelsSource; plan: StripePlan; pair: LiqPair | null; x0: number; pw: number; ph: number; view: View; colors: StripeColors; held: StripeHeld; fixed?: boolean }): StripePainted | null {
+  const { src, plan, pair, x0, pw, ph, view: v, colors: p, held, fixed } = o;
   if (!stripeStands(src, plan) || x0 >= pw - 8) return null;
   const levels = src.levels, leftReady = !!levels && src.state === 'ready', right = plan.two ? src.right : null, rightReady = !!right?.levels && right.state === 'ready';
   const takes = leftReady && src.takesState === 'ready' ? src.takes : null;
   const lanes: { levels: Lane; takes: Lane | null; right: Lane | null } = plan.two ? (({ left, takes: tl, right: rl }) => ({ levels: left, takes: tl, right: rl }))(splitLanes(x0, pw, !!takes)) : { ...stripeLanes(x0, pw, !!takes), right: null };
   const painted: StripePainted = { lanes: null, right: null, captions: null, takesLane: null };
   if (levels && leftReady) {
-    const { rows, heat } = held.levels = laneRows(src, 'levels', levels, v, ph, held.levels);
+    const { rows, heat, fixed: fixedLane } = held.levels = laneRows(src, 'levels', levels, v, ph, held.levels, fixed);
     // Take profits on alone are the levels: drawn as they are beside the others (dashed, buys below in the rising colour), the full width.
     const alone = levels.kind === 'takes';
     paintLiqStripe(ctx, v, lanes.levels.x0, lanes.levels.x1, ph, rows, heat, alone ? { long: p.candleUp, short: p.candleDown, text: p.text, muted: p.muted, bg: p.bg }
-      : { long: p.candleDown, short: p.candleUp, text: p.text, muted: p.muted, bg: p.bg }, alone);
+      : { long: p.candleDown, short: p.candleUp, text: p.text, muted: p.muted, bg: p.bg }, alone, fixedLane);
     if (takes && lanes.takes) {
       const tk = held.takes = laneRows(src, 'takes', takes, v, ph, held.takes);
       // By what the orders do: the take profits of shorts are buys (below the price, the rising colour), those of longs sells.
@@ -68,8 +68,8 @@ export function paintStripe(ctx: CanvasRenderingContext2D, o: { src: LiqLevelsSo
   // The right lane, from its own set, on its own colour scale; its rows kept by the set's key, which names its view (its group) and the
   // family of its orders, so a lane of one group never shows another's rows.
   if (lanes.right && right?.levels && rightReady) {
-    const rr = held.right = laneRows({ key: () => right.key(), takesKey: () => '', taken: () => right.taken(), takesTaken: () => null }, 'levels', right.levels, v, ph, held.right);
-    paintLiqStripe(ctx, v, lanes.right.x0, lanes.right.x1, ph, rr.rows, rr.heat, { long: p.candleDown, short: p.candleUp, text: p.text, muted: p.muted, bg: p.bg }, false);
+    const rr = held.right = laneRows({ key: () => right.key(), takesKey: () => '', taken: () => right.taken(), takesTaken: () => null }, 'levels', right.levels, v, ph, held.right, fixed);
+    paintLiqStripe(ctx, v, lanes.right.x0, lanes.right.x1, ph, rr.rows, rr.heat, { long: p.candleDown, short: p.candleUp, text: p.text, muted: p.muted, bg: p.bg }, false, rr.fixed);
     painted.right = { lane: lanes.right, set: right, whose: plan.whose[1] };
   }
   if (pair) {

@@ -227,6 +227,8 @@ html[data-bar="compact"] .panel { z-index: 60; max-height: min(88dvh, 780px); an
 html[data-bar="compact"] .panel-head { padding: 14px 8px 6px 18px; }
 html[data-bar="compact"] .panel-head h3 { font-size: 18px; }
 html[data-bar="compact"] .panel-body { overscroll-behavior: contain; padding-bottom: 16px; }
+html[data-bar="compact"] .cohort-panel tbody button { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; }
+html[data-bar="compact"] .cohort-panel :is(th, td) { padding-inline: 5px; }
 html[data-bar="compact"] .panel :is(button, select, input[type=number]) { min-height: 40px; }
 /* The ? among a panel's tools is the round button of the sheet's section heads, not a 40 px strip one help-button wide. */
 html[data-bar="compact"] .panel-tools button.help { width: 26px; height: 26px; min-height: 0; padding: 0; margin: 0; font-size: 0; line-height: 0; }

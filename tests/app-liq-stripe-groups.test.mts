@@ -6,7 +6,7 @@ import { PLATE_H } from '../src/app/map-top.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { LANE_MIN_W, LiqLevelsSource, TAKE_DASH, dashPhase, stripeLanes, takeDashOffset, type Lane, type LiqRow, type LiqSet } from '../src/app/liq-levels.ts';
+import { LANE_MIN_W, LiqLevelsSource, TAKE_DASH, dashPhase, stripeLanes, stripeRowAt, takeDashOffset, type Lane, type LiqRow, type LiqSet } from '../src/app/liq-levels.ts';
 import { noteLines, noteMostLines, paintStripe, stripeNote, type StripeHeld } from '../src/app/liq-stripe.ts';
 import { clock } from '../src/app/format.ts';
 import { View } from '../src/app/view.ts';
@@ -73,18 +73,19 @@ const rowAt = (rows: readonly LiqRow[], p: number): LiqRow => { const r = rows.f
 type Held = StripeHeld;
 const VIEW = new View({ t0: 0, t1: 1, ...SCREEN }), COLORS = { candleUp: 'up', candleDown: 'down', text: 'text', muted: 'muted', bg: 'bg' };
 /** A 2D context that records the x span of everything painted on it (rectangles, strokes and fills), and no-ops the rest. */
-function recorder(): { ctx: CanvasRenderingContext2D; spans: { x0: number; x1: number }[] } {
+function recorder() {
   const spans: { x0: number; x1: number }[] = [];
+  const rects: { x: number; y: number; h: number }[] = [];
   let path: number[] = [];
   const own: Record<string | symbol, unknown> = {
-    fillRect: (x: number, _y: number, w: number) => { spans.push({ x0: x, x1: x + w }); },
+    fillRect: (x: number, y: number, w: number, h: number) => { spans.push({ x0: x, x1: x + w }); rects.push({ x, y, h }); },
     beginPath: () => { path = []; }, moveTo: (x: number) => { path.push(x); }, lineTo: (x: number) => { path.push(x); },
     stroke: () => { if (path.length) spans.push({ x0: Math.min(...path), x1: Math.max(...path) }); },
     fill: () => { if (path.length) spans.push({ x0: Math.min(...path), x1: Math.max(...path) }); },
     measureText: (s: string) => ({ width: s.length * 6 }), getLineDash: () => [],
   };
   const ctx = new Proxy(own, { get: (o, k) => k in o ? o[k] : () => {}, set: (o, k, v) => { o[k] = v; return true; } });
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, spans };
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, spans, rects };
 }
 /**
  * One frame of the stripe painted by the map's own painter (`paintStripe`, which `HeatPane.#paintLiquidationLevels` calls) on a recording
@@ -251,12 +252,40 @@ test('too narrow to split or on a compact map: the stripe keeps one lane, everyo
   assert.deepEqual(titles(stripeBoxLines(rowAt(held.levels!.rows, 95), 'both', 100, src.standing(), src.partStandings(), side => side === 'long', f.plan.whose[0])), ['Long liquidations and stops']);
 });
 
+test('fixed levels paint and answer at the same source-bin prices at both zooms, and crossed lines disappear', async () => {
+  const src = familyService(), s = setting({ split: 'groups', fixed: true }), held: Held = { levels: null, takes: null, right: null };
+  assert.equal(s.fixed, true);
+  assert.equal(readLiqLevels({ fixed: 'yes' }).fixed, undefined);
+  assert.equal(readLiqLevels({ ...s, fixed: false }).fixed, undefined);
+  await show(src, s);
+  const pair = splitPair(s, true), plan = stripePlan(pair, true);
+  const draw = (view: View, fixed: boolean) => {
+    const { ctx, rects } = recorder();
+    paintStripe(ctx, { src, pair, plan, x0: 100, pw: 400, ph: PH, view, colors: COLORS, held, fixed });
+    return rects.filter(r => r.h === 1.5).map(r => Math.round(view.pOf(r.y + r.h / 2, PH)));
+  };
+  assert.deepEqual(draw(VIEW, true), [85, 95, 115, 125, 85, 95, 115, 125]);
+  const old = held.levels!, wide = new View({ t0: 0, t1: 1, p0: 0, p1: 7000 });
+  assert.deepEqual(draw(wide, true), [85, 95, 115, 125, 85, 95, 115, 125]);
+  assert.equal(held.levels, old);
+  assert.equal(held.right?.fixed, true);
+  assert.equal(held.takes?.fixed, false);
+  const shown = (r: LiqRow) => old.heat(r.longLeft) > 0 || old.heat(r.shortLeft) > 0;
+  assert.equal(stripeRowAt(old, VIEW, VIEW.yOf(95, PH), PH, 2, shown)?.p0, 90);
+  assert.equal(stripeRowAt(old, VIEW, VIEW.yOf(91, PH), PH, 2, shown), null);
+  assert.equal(stripeRowAt(old, wide, wide.yOf(95, PH), PH, 2, shown)?.p0, 90);
+  assert.deepEqual(draw(wide, false), []);
+  assert.equal(held.levels?.fixed, false);
+  src.observe(60);
+  assert.deepEqual(draw(VIEW, true), [115, 125, 115, 125]);
+});
+
 test('the map draws the stripe through its painter and takes only what it painted: the plan from the room for two lanes, the reading routed to the painted right lane first', () => {
   const heat = fs.readFileSync('src/app/panes/heat-pane.ts', 'utf8'), stripe = fs.readFileSync('src/app/liq-stripe.ts', 'utf8');
   assert.match(heat, /plan = stripePlan\(pair, stripeSplitRoom\(state\)\);\n    let note = stripeNote\(src, view, pair, plan\);/);
   assert.match(heat, /export const stripeSplitRoom = \(state: AppState\): boolean => liqSplitDrawn\(state\) \|\| \(!COMPACT && !state\.liqLevels\.column\);/);
   assert.match(heat, /#paintLiquidationLevels\(ctx: CanvasRenderingContext2D,[^\n]+\n[^\n]+\n[^\n]+\n    this\.#liqLanes = null; this\.#liqRightLane = null; this\.#liqNoteBox = null;/, 'neither lane answers the pointer before this frame draws it (another coin, a replay)');
-  assert.match(heat, /const painted = paintStripe\(ctx, \{ src, plan, pair, x0: this\.#liqStripeLeft\(pw\), pw, ph, view: v, colors: p, held: this\.#liqHeld \}\);/);
+  assert.match(heat, /const painted = paintStripe\(ctx, \{ src, plan, pair, x0: this\.#liqStripeLeft\(pw\), pw, ph, view: v, colors: p, held: this\.#liqHeld, fixed: state\.liqLevels\.fixed \}\);/);
   assert.match(heat, /this\.#liqLanes = painted\.lanes; this\.#liqRightLane = painted\.right;\n        if \(painted\.captions\) this\.#placeLiqCaptions\(ctx, painted\.captions, pw\);/);
   // The take profits' caption and a lane that is only out of date come from the painter (liq-stripe.ts), and the corner tools end left of the lanes.
   assert.match(stripe, /\.\.\.\(left\?\.takes \? \[\{ lane: left\.takes, words: t\('Take profits'\), dashed: true, old: src\.takesOutOfDate\(\) \}\] : \[\]\),/);

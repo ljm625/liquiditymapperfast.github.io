@@ -41,11 +41,13 @@ import { sendVerdict, type FrameKind } from './backpressure.mts';
 import { TIMEFRAMES, aggregateCandles, aggregateOi, quoteRows, timeframeMs, withLiveOi, type CandleRow, type OiRow } from './series.mts';
 import { FullDepthBooks, ownedMarket, type FullDepthSpec } from './full-depth.mts';
 import type { BookConnector, Market } from '../../shared/connector.ts';
+import { COHORT_ROUTE, isCohortHour } from '../../shared/cohorts.ts';
+import type { CohortPositioning } from './cohorts.mts';
 
 type App = ReturnType<typeof createLocalServer>;
 /** `oiSampling`: read the open interest of the venues the feed manager does not (oi-sampler.mts); a live server only, never a test. */
 /** `fullDepthMake`: how the full-depth owner makes its connector (full-depth.mts; tests give a fake that opens no socket). */
-export interface V2Options { dataDir: string; liveMs?: number; persist?: boolean; heartbeatMs?: number; oiSampling?: boolean; priceHistoryGet?: Fetcher; fullDepthMake?: (market: Market) => BookConnector }
+export interface V2Options { dataDir: string; liveMs?: number; persist?: boolean; heartbeatMs?: number; oiSampling?: boolean; priceHistoryGet?: Fetcher; fullDepthMake?: (market: Market) => BookConnector; cohorts?: CohortPositioning }
 export interface V2Handle {
   recorder: DepthRecorder; footprint: FootprintRecorder; prints: PrintStream; liquidations: LiquidationStream; flow: FlowRecorder; absorption: AbsorptionRecorder; extra: ExtraVenues; close(): void; handle(req: IncomingMessage, res: ServerResponse): boolean;
   /** Venues (the part of an instrument id before the colon) whose book is being left off the map, with the reason. */
@@ -127,7 +129,7 @@ const BAD_SERIES = 'inst and a supported tf are required';
 const BAD_LS_PERIOD = 'period must be milliseconds, more than 0';
 
 /** Attach the v2 data plane (depth recorder, live WebSocket, series endpoints) to a running local server. */
-export function attachV2(app: App, { dataDir, liveMs = 250, persist = true, heartbeatMs = HEARTBEAT_MS, oiSampling = false, priceHistoryGet = webGet, fullDepthMake }: V2Options): V2Handle {
+export function attachV2(app: App, { dataDir, liveMs = 250, persist = true, heartbeatMs = HEARTBEAT_MS, oiSampling = false, priceHistoryGet = webGet, fullDepthMake, cohorts }: V2Options): V2Handle {
   let store: SqliteColumnStore | null = null;
   if (persist) { fs.mkdirSync(dataDir, { recursive: true }); store = new SqliteColumnStore(path.join(dataDir, 'depth-v2.sqlite')); }
   // A day of columns in memory; older ones are read back from the store when a question reaches them, and kept (COLD_COLUMN_BINS).
@@ -902,6 +904,19 @@ export function attachV2(app: App, { dataDir, liveMs = 250, persist = true, hear
         if (req.method !== 'GET') return false;
         switch (url.pathname) {
           case '/api/v2/state': bootstrap(res); return true;
+          case COHORT_ROUTE: {
+            if (!cohorts) { sendJson(res, { error: 'not configured' }, 404); return true; }
+            // Subresource GETs can lack Origin. Only same-origin browser requests and non-browser readers may trigger the metered feed.
+            const site = req.headers['sec-fetch-site'];
+            if (site && site !== 'same-origin' && site !== 'none') { sendJson(res, { error: 'forbidden' }, 403); return true; }
+            const raw = url.searchParams.get('since'), since = raw === null ? null : Number(raw);
+            if (since !== null && !isCohortHour(since)) { sendJson(res, { error: 'since must be an hourly timestamp in milliseconds' }, 400); return true; }
+            void cohorts.read(since).then(data => {
+              if (closed || res.destroyed) return;
+              if (data) sendJson(res, data); else sendJson(res, { error: 'cohort data unavailable' }, 503);
+            }).catch(() => { if (!closed && !res.destroyed && !res.headersSent) sendJson(res, { error: 'cohort data unavailable' }, 503); });
+            return true;
+          }
           case '/api/v2/columns': columns(url, res); return true;
           case '/api/v2/candles': candles(url, res); return true;
           case '/api/v2/price-history': priceHistoryRoute(url, res); return true;
@@ -933,6 +948,7 @@ export function attachV2(app: App, { dataDir, liveMs = 250, persist = true, hear
     },
     close() {
       closed = true;
+      cohorts?.close();
       lsLag?.disable();
       clearInterval(loop); clearTimeout(absorptionWarm); clearTimeout(ltWarm); syncFar([]); fullDepth.close(); oiSampler?.close(); coins?.close(); (app.server as Server).off('upgrade', onUpgrade);
       for (const client of wss.clients) client.terminate();

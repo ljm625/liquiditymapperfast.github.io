@@ -57,6 +57,12 @@ What it loses relative to the server:
 - **Countries.** Binance and some others refuse some countries. A venue that never connects, keeps failing and fails a plain REST request while others work is shown as unavailable from the visitor's location, with a banner saying a VPN set to another country may enable it (verified by pointing the Binance hosts at a closed port in Chrome). The signal is only what the page can observe; an exchange does not say why it refuses.
 - **Per-visitor cost.** Each visitor's CPU does the book maintenance; measured numbers are in `Research_Findings.md` (phones are out of scope).
 
+## Optional BTC trader cohorts
+
+Set `HYPERDASH_API_KEY` in the local Node server’s environment. The key needs Hyperdash’s `analytics:read` scope. The panel reads `/api/v2/cohorts` on that server. The route caches 30 days of hourly samples in RAM, makes one upstream read for concurrent visitors, and refreshes only the hourly tail after the initial load. A server with no key reports the feature as unconfigured.
+
+For a static build, set `VITE_HLM_COHORTS_URL` to a URL serving the aggregate JSON returned by `/api/v2/cohorts`. The Pages workflow reads that URL from the repository variable `HLM_COHORTS_URL`. A relative URL can point to a file on the same site. A separate HTTPS origin needs to allow the site’s CORS origin. Publish the dataset only with authorization to display it. Each file has `v: 1`, `coin: "BTC"`, and a `samples` array of `hour` (UTC epoch milliseconds), `id`, `longUsd`, `shortUsd`, `longWallets`, and `shortWallets`. Wallet counts can be null. See the [shared contract](../src/shared/cohorts.ts) for group IDs. Keep the API key on the server or publisher.
+
 ## What has to be true before it is public
 
 1. **Bandwidth.** Every client receives a full levels frame about 3.5 times a second, roughly **1.1 MB/s** at all 26 venues (about 95 GB per day per always-on viewer). With the recommended eleven venues it is a fraction of that, but a public stream still needs **delta frames and compression** (or a coarser public stream than the one the local page gets) before more than a handful of viewers connect. This is the main engineering cost of going public.

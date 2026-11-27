@@ -41,6 +41,8 @@ import { SizeHistoryPane } from './panes/size-history-pane.ts';
 import { LiqPane } from './panes/liq-pane.ts';
 import { setTourDemo } from './tour/demo.ts';
 import { liqLevelsUrl } from './liq-url.ts';
+import { CohortReader } from './cohorts/source.ts';
+import { toggleCohorts } from './cohorts/panel.ts';
 import { DeltaPane, deltaHeldKey } from './panes/delta-pane.ts';
 import { NlnsSource } from './delta/nlns-source.ts';
 import { LsPane, lsIds } from './panes/ls-pane.ts';
@@ -196,6 +198,14 @@ async function main(): Promise<void> {
   // The Scripts lamp and key in the top bar: the key opens the panel (from the pane's own button too), the lamp says what the scripts do.
   toolbar.onOpenScripts = anchor => script.openPanel(anchor); script.onStatus = (note, name) => toolbar.setScriptsStatus(note, name);
   toolbar.onPriceSimulation = anchor => { if (isPhone()) dock.show('map'); heat.openPriceSimulation(anchor); };
+  const cohorts = new CohortReader(source.kind === 'server', import.meta.env.VITE_HLM_COHORTS_URL, location.href);
+  toolbar.onCohorts = anchor => {
+    if (isPhone()) dock.show('map');
+    toggleCohorts(anchor, async signal => {
+      if (hub.mapFirst()) await hub.afterMap();
+      return cohorts.read(signal);
+    });
+  };
   script.panelAnchor = () => toolbar.scriptsAnchor;
   // Tools an agent in the browser may call (agent/): read the chart and the scripts, try one, show one as a draft. Only a browser with page
   // tools loads them; nothing they do saves a script.
@@ -658,6 +668,7 @@ async function main(): Promise<void> {
     if (changed.has('show') || changed.has('liqLevels')) layout(); else if (changed.has('traded')) { gutters(); arrange.refit(); }
     // The map's own columns change with the market too (the liquidation column is BTC's, the price axis as wide as its prices).
     if (changed.has('marketId')) arrange.refit();
+    if (changed.has('liqLevels')) heat.invalidate();
     if (changed.has('mark') || changed.has('liqLevels')) liq.invalidate();
     if (changed.has('marketId') || changed.has('timeframe')) {
       // A series kept from before is framed the moment it is shown; one read afresh when it comes (framing it again then would undo a pan made meanwhile).
@@ -678,6 +689,7 @@ async function main(): Promise<void> {
     if (changed.has('depthBands') || changed.has('liqBands')) depth.settingsChanged();
     // What the levels show (liquidations, stops, both; whose; take profits) is the Depth pane's Liquidation levels too.
     if (changed.has('depthSource') || changed.has('liqLevels')) depth.refresh();
+    if (changed.has('exhaustion')) heat.invalidate();
     if (changed.has('absorption') || changed.has('tradeBubbles') || changed.has('liquidations') || changed.has('keyLevels') || changed.has('traded') || changed.has('vwap') || changed.has('tpo') || changed.has('vwapAnchoring') || changed.has('profileAnchoring') || changed.has('footprint') || changed.has('customMarkets') || changed.has('barStatOptions')) heat.invalidate();
     // Placing a VWAP anchor, selecting a Range and placing a drawing all take the next press on the map: arming one ends the others.
     if (changed.has('rangeTool') && state.rangeTool && state.vwapAnchoring) store.set({ vwapAnchoring: false });
@@ -749,7 +761,7 @@ async function main(): Promise<void> {
     if (changed.has('barCollapsed')) toolbar.setCollapsed(state.barCollapsed);
     if (['show', 'timeframe', 'marketId', 'disabledVenues', 'scope', 'markets', 'oiMarkets', 'customMarkets', 'oiInstrument', 'oiParts', 'seriesInstrument', 'range'].some(k => changed.has(k as never))) ls.invalidate();
     if (['show', 'candles', 'timeframe', 'marketId', 'disabledVenues', 'scope', 'markets', 'traded', 'timeZone', 'range', 'oi', 'oiInstrument', 'oiParts', 'oiFine'].some(k => changed.has(k as never))) delta.invalidate();
-    if (['markets', 'marketId', 'timeframe', 'layer', 'show', 'heat', 'theme', 'status', 'connected', 'disabledVenues', 'heatmapSource', 'levels', 'scope', 'sounds', 'soundState', 'lastSound', 'waveStrength', 'timeZone', 'absorption', 'highlight', 'range', 'rangeTool', 'liquidations', 'keyLevels', 'vwap', 'tpo', 'footprint', 'tabPrice', 'tabIcon', 'chartType', 'phoneHistory'].some(k => changed.has(k as never))) toolbar.sync(state, heat.window);
+    if (['markets', 'marketId', 'timeframe', 'layer', 'show', 'heat', 'theme', 'status', 'connected', 'disabledVenues', 'heatmapSource', 'levels', 'scope', 'sounds', 'soundState', 'lastSound', 'waveStrength', 'timeZone', 'absorption', 'highlight', 'range', 'rangeTool', 'liquidations', 'keyLevels', 'exhaustion', 'vwap', 'tpo', 'footprint', 'tabPrice', 'tabIcon', 'chartType', 'phoneHistory'].some(k => changed.has(k as never))) toolbar.sync(state, heat.window);
   });
 
   // Plus coming or going changes what the liquidation column can be (a split is Plus's, and widens it): the columns are laid out again.

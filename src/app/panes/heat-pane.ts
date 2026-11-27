@@ -27,7 +27,7 @@ import { Held, ROW_HOLD_MS, booksReaching, depthBand, depthBandLines, depthHereL
 import { activeIds, emptyScopeMessage, heatmapSourceOf, kindOf, type Kind } from '../scope.ts';
 import { venueOfInstrument } from '../cvd/families.ts';
 import { fitText, wrapText } from '../text-fit.ts';
-import { LIQ_PROFILE_ROWS, binsBetween, captionPlace, dollarPriceOf, laneRows, liqCurves, liqProfile, liqStanding, onTheWay, partsBetween, seamStats, standingBelow, standingBins, TAKE_DASH, type CurvePoint, type LaneRows, type LiqLevels, type LiqRow, type LiqSet, type LiqStanding } from '../liq-levels.ts';
+import { LIQ_PROFILE_ROWS, binsBetween, captionPlace, dollarPriceOf, liqCurves, liqProfile, liqStanding, onTheWay, partsBetween, seamStats, standingBelow, standingBins, stripeRowAt, TAKE_DASH, type CurvePoint, type LaneRows, type LiqLevels, type LiqRow, type LiqSet, type LiqStanding } from '../liq-levels.ts';
 import { SPLIT_COLUMN_W, captionKeepOut, cornerSpan, liqColumnWidth, ownScales, placeCaptions, splitHeads, splitScales, stripePlan, subAt, subColumns, whyLines, type Rect, type Sub, type SubScale } from '../liq-split.ts';
 import { MAP_PLOT_FLOOR } from '../layouts/dock-model.ts';
 import { bubbleHidden, bubbleRadius, printPriceLines, topPrints, type Print } from '../prints.ts';
@@ -90,6 +90,7 @@ import { drawVenueMark } from '../venue-marks.ts';
 import { draftLabel } from '../range/stats.ts';
 import type { RangePoint, RangeTool } from '../range/tool.ts';
 import { paintDivergence, type Divergence } from '../delta/divergence.ts';
+import { exhaustionHit, exhaustionLines, paintExhaustion, type ExhaustionHit } from '../exhaustion/paint.ts';
 import { TopBands, topMarks, type TopProfile } from '../measures/strip.ts';
 import { BAND_GAP, flowRows, volumeBand, type TimeRows } from '../measures/model.ts';
 import { CANDLE_LINE_PX, LINE_POINT_PX, countdown, lineSide, thinLine, type LinePoint } from '../price-line.ts';
@@ -410,6 +411,7 @@ export class HeatPane {
   #simulation: PriceSimulationPanel | null = null;
   /** Each lane of the stripe's rows in view as last painted (the levels', the take profits', a split's right set's), kept by their keys (liq-stripe.ts). */
   readonly #liqHeld: StripeHeld = { levels: null, takes: null, right: null };
+  #exhaustionHits: readonly ExhaustionHit[] = [];
   /** The wide liquidation column as last drawn with its curves (its left and width, the curves' width, their dollars at full width), for `#paintLiqReadout`. */
   #liqScale: { x0: number; W: number; width: number; maxCum: number } | null = null;
   /** The set the unsplit column drew this frame (the page's one series, or the sum a split too narrow falls back to), for the pointer's reading. */
@@ -1467,6 +1469,22 @@ export class HeatPane {
     ctx.restore();
   }
 
+  #paintExhaustion(ctx: CanvasRenderingContext2D, state: AppState, pw: number, ph: number, pricePainted: boolean): void {
+    this.#exhaustionHits = [];
+    const settings = state.exhaustion;
+    if (!pricePainted || !settings.on || !settings.frames.length || (!settings.marks && !settings.levels)) return;
+    const target = historyTarget(state.seriesInstrument || state.marketId, currentCoin());
+    if (!target?.own) return;
+    const series = this.hub.exhaustionHistory.read(target, settings, !document.hidden && !this.hub.firstColumnsPending(), () => this.invalidate());
+    if (!series.length) return;
+    const zoomed = this.#zoomedShown(state), chartMs = zoomed ? this.drawnTf(state) : TIMEFRAMES[state.timeframe] ?? 3_600_000;
+    const candles = !settings.marks ? [] : zoomed ? this.zoomedRows(state, chartMs) : this.candlesDrawn(state);
+    const slot = pw * chartMs / (this.view.t1 - this.view.t0), layout = footprintLayout(Math.max(1, slot));
+    const candleShift = zoomed ? 0 : (layout.candleCenter - slot / 2) * this.#lodFrame.narrowing;
+    this.#exhaustionHits = paintExhaustion(ctx, series, { view: this.view, pw, ph, now: pageNow(), palette: this.#palette, settings,
+      candles, chartMs, candleShift, closeLine: !zoomed && (this.#drawnType(state) === 'line' || slot < CANDLE_LINE_PX) });
+  }
+
   #paintOverlay(state: AppState): void {
     const ctx = this.#ctx, w = this.#w, h = this.#h, pw = this.plotW, ph = this.plotH, v = this.view, p = this.#palette, left = this.#left;
     // The plot's width, for a probe of the layout (it reads the page, not arithmetic).
@@ -1541,6 +1559,7 @@ export class HeatPane {
     this.#valueTags = this.#paintValueLines(ctx, state, pw, ph);
     this.#keyTags = state.keyLevels.on ? paintKeyLevels(ctx, this.#keyLevelLines(state), v, pw, ph, p, state.keyLevels, pageNow(), this.#keyLevelContext(state).zone, this.#labels) : [];
     this.#vwapTags = state.vwap.on ? paintVwap(ctx, this.#vwapLines(state), v, pw, ph, p, state.vwap, this.#labels, state.vwap.anchors[currentCoin().coin] ?? []) : [];
+    this.#paintExhaustion(ctx, state, pw, ph, pricePainted);
     this.scriptLayer?.(ctx, pw, ph);
     this.#drawTags = this.draw ? paintDrawings(ctx, this.draw, this.drawProjection(), p) : [];
     if (this.#simulation) {
@@ -2450,7 +2469,7 @@ export class HeatPane {
     this.#liqNoteBox = { x0: 8, x1: 8 + Math.max(0, ...lines.map(measure)), top, bottom: top + 13 * lines.length };
     if (stands) {
       // What was painted is all that answers the pointer and all that is captioned (liq-stripe.ts `paintStripe`).
-      const painted = paintStripe(ctx, { src, plan, pair, x0: this.#liqStripeLeft(pw), pw, ph, view: v, colors: p, held: this.#liqHeld });
+      const painted = paintStripe(ctx, { src, plan, pair, x0: this.#liqStripeLeft(pw), pw, ph, view: v, colors: p, held: this.#liqHeld, fixed: state.liqLevels.fixed });
       if (painted) {
         this.#liqLanes = painted.lanes; this.#liqRightLane = painted.right;
         if (painted.captions) this.#placeLiqCaptions(ctx, painted.captions, pw);
@@ -2537,11 +2556,6 @@ export class HeatPane {
   /** Where the liquidation stripe begins: the live edge (the plot's left edge when that is off to the left). */
   #liqStripeLeft(pw: number): number { return Math.max(0, Math.round(this.view.xOf(pageNow(), pw))); }
 
-  /** The rows in view with their colour scale, as drawn; grouped again only when the levels, what price has taken or the rows on screen change (`laneRows`). */
-  #liqRowsDrawn(levels: LiqLevels, ph: number): LaneRows { return this.#liqHeld.levels = laneRows(this.hub.liqLevels, 'levels', levels, this.view, ph, this.#liqHeld.levels); }
-  /** The same for the take profits' lane (their own colour scale). */
-  #liqTakeRowsDrawn(levels: LiqLevels, ph: number): LaneRows { return this.#liqHeld.takes = laneRows(this.hub.liqLevels, 'takes', levels, this.view, ph, this.#liqHeld.takes); }
-
   /** The chart's price when it is in dollars (a dollar or a dollar stablecoin), else NaN: Liquidation levels compare it with Hyperliquid's. */
   #dollarPrice(state: AppState): number { return dollarPriceOf(state); }
 
@@ -2612,18 +2626,13 @@ export class HeatPane {
     if (right && held && x >= right.lane.x0 && x < right.lane.x1) return this.#laneLines(state, right.set, held, y, ph, touch, right.whose);
     if (!lanes || src.state !== 'ready') return [];
     const inTakes = !!lanes.takes && x >= lanes.takes.x0 && x < lanes.takes.x1, levels = inTakes ? src.takes : x >= lanes.levels.x0 && x < lanes.levels.x1 ? src.levels : null;
-    if (!levels) return [];
-    const { rows, heat } = inTakes ? this.#liqTakeRowsDrawn(levels, ph) : this.#liqRowsDrawn(levels, ph), slop = touch ? 6 : 2;
+    const drawn = inTakes ? this.#liqHeld.takes : this.#liqHeld.levels;
+    if (!levels || !drawn) return [];
+    const { heat } = drawn, slop = touch ? 6 : 2;
     const shown = (r: LiqRow, side: 'long' | 'short'): boolean => r[`${side}Left`] > 0 && heat(r[`${side}Left`]) > 0;
-    let row: LiqRow | null = null, best = Infinity;
-    for (const r of rows) {
-      const top = v.yOf(r.p1, ph), bottom = v.yOf(r.p0, ph);
-      if (y < top - slop || y > bottom + slop || !(shown(r, 'long') || shown(r, 'short'))) continue;
-      const d = Math.abs(y - (top + bottom) / 2);
-      if (d < best) { best = d; row = r; }
-    }
-    if (!row) return [];
-    const found = row, kind = levels.kind;
+    const found = stripeRowAt(drawn, v, y, ph, slop, r => shown(r, 'long') || shown(r, 'short'));
+    if (!found) return [];
+    const kind = levels.kind;
     const lines = stripeBoxLines(found, kind, this.#liqPrice(state), inTakes ? src.takesStanding() : src.standing(), kind === 'both' ? src.partStandings() : null, side => shown(found, side),
       inTakes ? lanes.takesWhose : lanes.whose);
     // The profitable traders' orders the view asks for are not on the server: said where a level is read, never drawn from everyone's.
@@ -2639,15 +2648,9 @@ export class HeatPane {
     const levels = set.levels, v = this.view, slop = touch ? 6 : 2;
     if (!levels || set.state !== 'ready') return [];
     const shown = (r: LiqRow, side: 'long' | 'short'): boolean => r[`${side}Left`] > 0 && drawn.heat(r[`${side}Left`]) > 0;
-    let row: LiqRow | null = null, best = Infinity;
-    for (const r of drawn.rows) {
-      const top = v.yOf(r.p1, ph), bottom = v.yOf(r.p0, ph);
-      if (y < top - slop || y > bottom + slop || !(shown(r, 'long') || shown(r, 'short'))) continue;
-      const d = Math.abs(y - (top + bottom) / 2);
-      if (d < best) { best = d; row = r; }
-    }
-    if (!row) return [];
-    const found = row, at = this.#liqPrice(state);
+    const found = stripeRowAt(drawn, v, y, ph, slop, r => shown(r, 'long') || shown(r, 'short'));
+    if (!found) return [];
+    const at = this.#liqPrice(state);
     return setBoxLines(found, set, at > 0 ? at : this.hub.liqLevels.lastPriceOf(levels), side => shown(found, side), whose);
   }
 
@@ -4834,9 +4837,10 @@ export class HeatPane {
     stripped = ownY && here ? this.#stripAt(x, y, ph, pw) : -1;
     // A script's mark is a small target someone aimed at: it answers before what is drawn under it.
     const marked = ownY && here && stripped < 0 ? this.scriptMarkAt(x, y, touch) : null;
-    const absorbed = ownY && here && stripped < 0 && !marked ? this.#absorptionAt(x, y) : null;
-    const forced = ownY && here && stripped < 0 && !absorbed ? this.#diamondAt(x, y) : null;
-    const hit = ownY && here && stripped < 0 && !absorbed && !forced ? this.#bubbleAt(x, y) : null;
+    const exhausted = ownY && here && stripped < 0 && !marked ? exhaustionHit(this.#exhaustionHits, x, y, touch) : null;
+    const absorbed = ownY && here && stripped < 0 && !marked && !exhausted ? this.#absorptionAt(x, y) : null;
+    const forced = ownY && here && stripped < 0 && !exhausted && !absorbed ? this.#diamondAt(x, y) : null;
+    const hit = ownY && here && stripped < 0 && !exhausted && !absorbed && !forced ? this.#bubbleAt(x, y) : null;
     if (stripped < 0) this.#orders.rest();
     if (stripped >= 0) { // a bar of the volume strip: it owns its rectangle, over whatever is drawn there
       const s = this.#strip!, bar = s.bars[stripped]!, whale = scaledUsd(state.barStatOptions.whaleUsd);
@@ -4845,6 +4849,9 @@ export class HeatPane {
     } else if (marked) { // a script's mark: its text in its colour, what the script says of it, and the script's name
       const edge = marked.color, pick = (c: InfoColor): string => c === 'above' ? edge : c === 'muted' ? p.muted : p.text;
       paintInfoBox(ctx, marked.lines, x, touch ? marked.box.y - 8 : marked.box.y + marked.box.h / 2, { x0: 0, y0: 0, x1: pw, y1: ph }, p, { edge, pick, gap: Math.max(10, marked.box.w / 2 + 8), placement: touch ? 'up' : 'center' });
+    } else if (exhausted) {
+      paintInfoBox(ctx, exhaustionLines(exhausted, state.exhaustion.length), x, touch ? exhausted.top - 8 : exhausted.y,
+        { x0: 0, y0: 0, x1: pw, y1: ph }, p, { edge: exhausted.color, gap: 14, placement: touch ? 'up' : 'center' });
     } else if (forced) { // a liquidation under the pointer: which positions were closed, where, and what the exchange reported
       const long = forced.liq.side === 'long';
       paintInfoBox(ctx, liquidationLines(forced.liq), x, touch ? forced.y - forced.r - 8 : forced.y, { x0: 0, y0: 0, x1: pw, y1: ph }, p, { edge: long ? p.candleDown : p.candleUp, gap: forced.r + 10, placement: touch ? 'up' : 'center' });
